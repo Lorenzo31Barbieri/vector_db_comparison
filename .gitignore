@@ -1,0 +1,5 @@
+venv
+__pycache__
+logs
+volumes
+qdrant_storage
