@@ -9,7 +9,10 @@ from pymilvus import (
     utility,
 )
 
-import config as config
+try:
+    from . import config as config
+except ImportError:
+    import config as config
 from common.perf import safe_throughput
 
 
@@ -38,6 +41,7 @@ def recreate_collection(dimension: int) -> Collection:
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False),
         FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dimension),
+        FieldSchema(name="bucket", dtype=DataType.INT64),
     ]
     schema = CollectionSchema(fields, description="SIFT Benchmark")
     collection = Collection(name=config.COLLECTION_NAME, schema=schema)
@@ -62,7 +66,9 @@ def insert_vectors(collection: Collection, vectors: list) -> dict:
 
     for i in range(0, total, config.BATCH_SIZE):
         end_idx = min(i + config.BATCH_SIZE, total)
-        collection.insert([list(range(i, end_idx)), vectors[i:end_idx]])
+        ids = list(range(i, end_idx))
+        buckets = [value % 100 for value in ids]
+        collection.insert([ids, vectors[i:end_idx], buckets])
         if i > 0 and i % 100_000 == 0:
             print(f"  {i} vectors inserted...")
 

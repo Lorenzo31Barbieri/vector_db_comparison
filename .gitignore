@@ -4,3 +4,5 @@ logs
 volumes
 qdrant_storage
 .vscode
+.venv-smoke
+results

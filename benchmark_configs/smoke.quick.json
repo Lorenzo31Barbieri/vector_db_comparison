@@ -1,0 +1,36 @@
+{
+  "experiment": {
+    "name": "vectordb_smoke",
+    "seed": 7,
+    "repeats": 1,
+    "output_dir": "results",
+    "notes": "Quick smoke run to validate framework wiring"
+  },
+  "dataset": {
+    "name": "open-vdb/sift-128-euclidean",
+    "sizes": [2000],
+    "query_count": 20,
+    "top_k": 5
+  },
+  "backends": [
+    "milvus",
+    "qdrant"
+  ],
+  "ann": {
+    "enabled": true,
+    "nprobe_values": [5],
+    "hnsw_ef_values": [64]
+  },
+  "concurrency": {
+    "enabled": true,
+    "concurrency_levels": [1, 2]
+  },
+  "filtering": {
+    "enabled": true,
+    "selectivities": [0.5]
+  },
+  "hybrid": {
+    "enabled": false,
+    "mode": "metadata_rerank_placeholder"
+  }
+}

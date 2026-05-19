@@ -1,7 +1,11 @@
 import time
 import numpy as np
+from qdrant_client import models
 
-import config as config
+try:
+    from . import config as config
+except ImportError:
+    import config as config
 from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
 
 
@@ -12,6 +16,27 @@ def _search(client, query_vector, *, exact: bool):
         limit=config.TOP_K,
         search_params={
             "hnsw_ef": config.HNSW_EF,
+            "exact": exact,
+        },
+    )
+
+
+def search(
+    client,
+    query_vector,
+    *,
+    exact: bool,
+    query_filter: models.Filter | None = None,
+    hnsw_ef: int | None = None,
+    limit: int | None = None,
+):
+    return client.query_points(
+        collection_name=config.COLLECTION_NAME,
+        query=query_vector.tolist(),
+        limit=config.TOP_K if limit is None else int(limit),
+        query_filter=query_filter,
+        search_params={
+            "hnsw_ef": config.HNSW_EF if hnsw_ef is None else int(hnsw_ef),
             "exact": exact,
         },
     )
@@ -32,7 +57,7 @@ def warm_up(
     print(f"\nRunning {n} warm-up queries...")
 
     for query_vector in query_vectors[:n]:
-        _search(client, query_vector, exact=False)
+        search(client, query_vector, exact=False)
 
     print("Warm-up complete.")
 
@@ -44,6 +69,9 @@ def warm_up(
 def build_ground_truth(
     client,
     query_vectors,
+    *,
+    query_filter: models.Filter | None = None,
+    limit: int | None = None,
 ):
 
     print("\nBuilding brute-force ground truth...")
@@ -52,7 +80,13 @@ def build_ground_truth(
 
     for i, query_vector in enumerate(query_vectors):
 
-        response = _search(client, query_vector, exact=True)
+        response = search(
+            client,
+            query_vector,
+            exact=True,
+            query_filter=query_filter,
+            limit=limit,
+        )
 
         hits = response.points
 
@@ -75,6 +109,10 @@ def build_ground_truth(
 def run_single_query_benchmark(
     client,
     query_vectors,
+    *,
+    query_filter: models.Filter | None = None,
+    hnsw_ef: int | None = None,
+    limit: int | None = None,
 ):
 
     print(f"\nRunning single-query benchmark ({len(query_vectors)} queries)...")
@@ -85,7 +123,14 @@ def run_single_query_benchmark(
     for i, query_vector in enumerate(query_vectors):
 
         start = time.perf_counter()
-        response = _search(client, query_vector, exact=False)
+        response = search(
+            client,
+            query_vector,
+            exact=False,
+            query_filter=query_filter,
+            hnsw_ef=hnsw_ef,
+            limit=limit,
+        )
 
         elapsed_ms = (
             time.perf_counter() - start
@@ -133,3 +178,14 @@ def compute_recall(
 
 def aggregate_latency_metrics(latencies: list) -> dict:
     return shared_aggregate_latency_metrics(latencies)
+
+
+def build_bucket_filter(max_bucket_exclusive: int) -> models.Filter:
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key="bucket",
+                range=models.Range(gte=0, lt=max_bucket_exclusive),
+            )
+        ]
+    )

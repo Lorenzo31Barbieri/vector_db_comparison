@@ -89,6 +89,54 @@ python main.py
 # - Each run appends one row to ../benchmark_results.csv
 ```
 
+## Phase 2 benchmark suite (reproducible runner)
+
+The project now includes a configuration-driven benchmark runner for repeatable
+experiments and analysis-friendly outputs.
+
+### What it adds
+
+- Reproducible experiment manifests (`seed`, run metadata, platform info, git commit)
+- Structured result tracking (`results.jsonl`, `results.csv`, `run.log`)
+- Scenario-based execution matrix (ANN frontier, concurrency, filtering)
+- Statistical repeat runs (`repeats`) for confidence interval analysis
+- Additional quality metric: **precision@k** (alongside recall@k)
+- Storage footprint capture where available (Qdrant)
+
+### Benchmark config files
+
+- `benchmark_configs/suite.default.json` — default Phase 2 suite
+- `benchmark_configs/academic.matrix.json` — larger matrix for essay-grade analysis
+
+### Run the suite
+
+```bash
+# from repository root
+python benchmark_runner.py --config benchmark_configs/suite.default.json
+```
+
+Results are written to a timestamped folder under `results/`, including:
+
+- `manifest.json` — full experiment/environment configuration
+- `results.jsonl` — one JSON record per measured datapoint
+- `results.csv` — flattened table for pandas/R analysis
+- `run.log` — detailed execution log
+
+### Initialize a fresh default config
+
+```bash
+python benchmark_runner.py --init-config --config benchmark_configs/suite.default.json
+```
+
+### Scenario coverage
+
+- `lifecycle`: insertion/index/load + memory/storage metrics
+- `ann_frontier`: recall/precision/latency/QPS across search-parameter sweeps
+- `concurrency`: throughput and tail-latency under increasing parallel clients
+- `filtering`: filtered-search latency and quality across selectivity levels
+- `hybrid`: placeholder output entry (`skipped`) until a common native hybrid API
+    is implemented for both backends in this repository
+
 ## Configuration
 
 All parameters are in the respective `config.py` files. Key knobs:

@@ -3,7 +3,10 @@ import time
 import numpy as np
 from pymilvus import Collection
 
-import config as config
+try:
+    from . import config as config
+except ImportError:
+    import config as config
 from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
 
 
@@ -19,6 +22,25 @@ def _search(collection: Collection, vectors: list) -> list:
     )
 
 
+def search(
+    collection: Collection,
+    vectors: list,
+    *,
+    expr: str | None = None,
+    nprobe: int | None = None,
+    limit: int | None = None,
+) -> list:
+    effective_nprobe = config.NPROBE if nprobe is None else int(nprobe)
+    effective_limit = config.TOP_K if limit is None else int(limit)
+    return collection.search(
+        data=vectors,
+        anns_field="vector",
+        param={"metric_type": config.METRIC_TYPE, "params": {"nprobe": effective_nprobe}},
+        limit=effective_limit,
+        expr=expr,
+    )
+
+
 # ── Warm-up ───────────────────────────────────────────────────────────────────
 
 def warm_up(collection: Collection, query_vectors: list) -> None:
@@ -28,13 +50,20 @@ def warm_up(collection: Collection, query_vectors: list) -> None:
         return
     print(f"\nWarm-up: running {n} queries (results discarded)...")
     for i in range(n):
-        _search(collection, [query_vectors[i]])
+        search(collection, [query_vectors[i]])
     print("Warm-up done.")
 
 
 # ── Single-query benchmark ────────────────────────────────────────────────────
 
-def run_single_query_benchmark(collection: Collection, query_vectors: list) -> dict:
+def run_single_query_benchmark(
+    collection: Collection,
+    query_vectors: list,
+    *,
+    expr: str | None = None,
+    nprobe: int | None = None,
+    limit: int | None = None,
+) -> dict:
     """
     Execute NQ queries one at a time and record per-query latency.
 
@@ -50,10 +79,10 @@ def run_single_query_benchmark(collection: Collection, query_vectors: list) -> d
 
     for i, qv in enumerate(query_vectors):
         t0 = time.perf_counter()
-        res = _search(collection, [qv])
+        res = search(collection, [qv], expr=expr, nprobe=nprobe, limit=limit)
         latency_ms = (time.perf_counter() - t0) * 1000
         latencies.append(latency_ms)
-        results.append(res[0])  # one result set per query
+        results.append(res[0])
         print(f"  Query {i + 1:>3}/{len(query_vectors)}  {latency_ms:6.2f} ms")
 
     return {"latencies": latencies, "results": results}
@@ -61,7 +90,14 @@ def run_single_query_benchmark(collection: Collection, query_vectors: list) -> d
 
 # ── Batch-query benchmark ─────────────────────────────────────────────────────
 
-def run_batch_query_benchmark(collection: Collection, query_vectors: list) -> dict:
+def run_batch_query_benchmark(
+    collection: Collection,
+    query_vectors: list,
+    *,
+    expr: str | None = None,
+    nprobe: int | None = None,
+    limit: int | None = None,
+) -> dict:
     """
     Send all NQ queries in a single batch search call.
 
@@ -74,7 +110,7 @@ def run_batch_query_benchmark(collection: Collection, query_vectors: list) -> di
     """
     print(f"\nRunning batch-query benchmark ({len(query_vectors)} queries in one call)...")
     t0 = time.perf_counter()
-    results = _search(collection, query_vectors)
+    results = search(collection, query_vectors, expr=expr, nprobe=nprobe, limit=limit)
     batch_time_ms = (time.perf_counter() - t0) * 1000
     batch_qps = len(query_vectors) / (batch_time_ms / 1000)
     print(f"  Batch completed in {batch_time_ms:.2f} ms  ({batch_qps:.0f} QPS)")
@@ -110,16 +146,22 @@ def build_ground_truth(collection: Collection, query_vectors: list) -> list:
     Brute-force ground truth: search with nprobe == nlist (exhaustive IVF).
     """
     print("\nBuilding brute-force ground truth for recall computation...")
-    results = collection.search(
-        data=query_vectors,
-        anns_field="vector",
-        param={
-            "metric_type": config.METRIC_TYPE,
-            "params": {"nprobe": config.NLIST},  # exhaustive
-        },
-        limit=config.TOP_K,
-    )
+    results = search(collection, query_vectors, nprobe=config.NLIST)
     return list(results)
+
+
+def build_ground_truth_filtered(
+    collection: Collection,
+    query_vectors: list,
+    expr: str,
+    *,
+    limit: int,
+) -> list:
+    return list(search(collection, query_vectors, expr=expr, nprobe=config.NLIST, limit=limit))
+
+
+def extract_hit_ids(results: list, *, k: int) -> list[list[int]]:
+    return [[hit.id for hit in hits[:k]] for hits in results]
 
 
 # ── Metric aggregation ────────────────────────────────────────────────────────

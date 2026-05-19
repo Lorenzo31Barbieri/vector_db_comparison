@@ -10,7 +10,10 @@ from qdrant_client.models import (
     PointStruct,
 )
 
-import config as config
+try:
+    from . import config as config
+except ImportError:
+    import config as config
 from common.perf import safe_throughput
 
 
@@ -105,6 +108,10 @@ def insert_vectors(
             PointStruct(
                 id=i + offset,
                 vector=vec,
+                payload={
+                    "bucket": (i + offset) % 100,
+                    "label": f"label_{(i + offset) % 10}",
+                },
             )
             for offset, vec in enumerate(batch_vectors)
         ]
@@ -269,3 +276,14 @@ def estimate_memory_mb(
     total = vectors_bytes + hnsw_bytes
 
     return total / (1024 ** 2)
+
+
+def estimate_storage_mb(client: QdrantClient) -> float | None:
+    try:
+        info = client.get_collection(config.COLLECTION_NAME)
+        disk_data_size = getattr(info, "disk_data_size", None)
+        if disk_data_size is None:
+            return None
+        return float(disk_data_size) / (1024 ** 2)
+    except Exception:
+        return None

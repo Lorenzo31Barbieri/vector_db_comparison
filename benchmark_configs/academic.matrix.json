@@ -1,0 +1,36 @@
+{
+  "experiment": {
+    "name": "vectordb_academic_matrix",
+    "seed": 123,
+    "repeats": 7,
+    "output_dir": "results",
+    "notes": "Extended matrix for academic analysis with confidence intervals"
+  },
+  "dataset": {
+    "name": "open-vdb/sift-128-euclidean",
+    "sizes": [100000, 200000],
+    "query_count": 500,
+    "top_k": 10
+  },
+  "backends": [
+    "milvus",
+    "qdrant"
+  ],
+  "ann": {
+    "enabled": true,
+    "nprobe_values": [5, 10, 20, 40],
+    "hnsw_ef_values": [64, 128, 256, 512]
+  },
+  "concurrency": {
+    "enabled": true,
+    "concurrency_levels": [1, 2, 4, 8, 16, 32]
+  },
+  "filtering": {
+    "enabled": true,
+    "selectivities": [0.5, 0.2, 0.1, 0.01]
+  },
+  "hybrid": {
+    "enabled": false,
+    "mode": "metadata_rerank_placeholder"
+  }
+}
