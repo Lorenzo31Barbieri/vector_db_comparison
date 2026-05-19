@@ -1,10 +1,10 @@
 import time
-import statistics
 
 import numpy as np
 from pymilvus import Collection
 
 import config as config
+from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
 
 
 # ── Search helpers ────────────────────────────────────────────────────────────
@@ -132,15 +132,4 @@ def aggregate_latency_metrics(latencies: list) -> dict:
     -------
     dict with: avg, median, p95, p99, min, max, stddev, qps
     """
-    arr = np.array(latencies)
-    avg = float(np.mean(arr))
-    return {
-        "avg_ms":    avg,
-        "min_ms":    float(np.min(arr)),
-        "max_ms":    float(np.max(arr)),
-        "median_ms": float(np.percentile(arr, 50)),
-        "p95_ms":    float(np.percentile(arr, 95)),
-        "p99_ms":    float(np.percentile(arr, 99)),
-        "stddev_ms": float(np.std(arr)),
-        "qps":       1000.0 / avg,
-    }
+    return shared_aggregate_latency_metrics(latencies)

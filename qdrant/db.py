@@ -11,6 +11,7 @@ from qdrant_client.models import (
 )
 
 import config as config
+from common.perf import safe_throughput
 
 
 # ─────────────────────────────────────────────────────────────
@@ -118,8 +119,7 @@ def insert_vectors(
             print(f"  {i:,} vectors inserted...")
 
     elapsed = time.time() - start
-
-    throughput = total / elapsed
+    throughput = safe_throughput(total, elapsed)
 
     print(f"Insertion done in {elapsed:.2f}s "
           f"({throughput:,.0f} vectors/s)")
@@ -213,11 +213,7 @@ def build_index(
 
     elapsed = time.time() - start
 
-    throughput = (
-        num_vectors / elapsed
-        if elapsed > 0
-        else float("inf")
-    )
+    throughput = safe_throughput(num_vectors, elapsed)
 
     print(
         f"Index built in {elapsed:.2f}s "

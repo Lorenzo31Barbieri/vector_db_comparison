@@ -10,6 +10,7 @@ from pymilvus import (
 )
 
 import config as config
+from common.perf import safe_throughput
 
 
 # ── Connection ──────────────────────────────────────────────────────────────
@@ -67,9 +68,10 @@ def insert_vectors(collection: Collection, vectors: list) -> dict:
 
     collection.flush()
     elapsed = time.time() - start
+    throughput = safe_throughput(total, elapsed)
 
-    print(f"Insertion done in {elapsed:.2f}s  ({total / elapsed:.0f} vectors/s)")
-    return {"insert_time": elapsed, "throughput": total / elapsed}
+    print(f"Insertion done in {elapsed:.2f}s  ({throughput:.0f} vectors/s)")
+    return {"insert_time": elapsed, "throughput": throughput}
 
 
 # ── Indexing ─────────────────────────────────────────────────────────────────
@@ -92,9 +94,10 @@ def build_index(collection: Collection, num_vectors: int) -> dict:
     start = time.time()
     collection.create_index(field_name="vector", index_params=index_params)
     elapsed = time.time() - start
+    throughput = safe_throughput(num_vectors, elapsed)
 
-    print(f"Index built in {elapsed:.2f}s  ({num_vectors / elapsed:.0f} vectors/s)")
-    return {"index_time": elapsed, "index_throughput": num_vectors / elapsed}
+    print(f"Index built in {elapsed:.2f}s  ({throughput:.0f} vectors/s)")
+    return {"index_time": elapsed, "index_throughput": throughput}
 
 
 # ── Load into memory ─────────────────────────────────────────────────────────

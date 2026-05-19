@@ -2,6 +2,19 @@ import time
 import numpy as np
 
 import config as config
+from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
+
+
+def _search(client, query_vector, *, exact: bool):
+    return client.query_points(
+        collection_name=config.COLLECTION_NAME,
+        query=query_vector.tolist(),
+        limit=config.TOP_K,
+        search_params={
+            "hnsw_ef": config.HNSW_EF,
+            "exact": exact,
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────
@@ -12,22 +25,14 @@ def warm_up(
     client,
     query_vectors,
 ):
+    n = min(config.WARM_UP_QUERIES, len(query_vectors))
+    if n == 0:
+        return
 
-    print(
-        f"\nRunning {config.WARM_UP_QUERIES} warm-up queries..."
-    )
+    print(f"\nRunning {n} warm-up queries...")
 
-    for q in query_vectors[:config.WARM_UP_QUERIES]:
-
-        client.query_points(
-            collection_name=config.COLLECTION_NAME,
-            query=q.tolist(),
-            limit=config.TOP_K,
-            search_params={
-                "hnsw_ef": config.HNSW_EF,
-                "exact": False,
-            },
-        )
+    for query_vector in query_vectors[:n]:
+        _search(client, query_vector, exact=False)
 
     print("Warm-up complete.")
 
@@ -45,16 +50,9 @@ def build_ground_truth(
 
     ground_truth = []
 
-    for i, q in enumerate(query_vectors):
+    for i, query_vector in enumerate(query_vectors):
 
-        response = client.query_points(
-            collection_name=config.COLLECTION_NAME,
-            query=q.tolist(),
-            limit=config.TOP_K,
-            search_params={
-                "exact": True,
-            },
-        )
+        response = _search(client, query_vector, exact=True)
 
         hits = response.points
 
@@ -71,49 +69,33 @@ def build_ground_truth(
 
 
 # ─────────────────────────────────────────────────────────────
-# ANN search benchmark
+# Single-query benchmark
 # ─────────────────────────────────────────────────────────────
 
-def benchmark_search(
+def run_single_query_benchmark(
     client,
     query_vectors,
 ):
 
-    print("\nRunning ANN search benchmark...")
+    print(f"\nRunning single-query benchmark ({len(query_vectors)} queries)...")
 
     latencies = []
+    results = []
 
-    for q in query_vectors:
+    for i, query_vector in enumerate(query_vectors):
 
         start = time.perf_counter()
-
-        client.query_points(
-            collection_name=config.COLLECTION_NAME,
-            query=q.tolist(),
-            limit=config.TOP_K,
-            search_params={
-                "hnsw_ef": config.HNSW_EF,
-                "exact": False,
-            },
-        )
+        response = _search(client, query_vector, exact=False)
 
         elapsed_ms = (
             time.perf_counter() - start
         ) * 1000
 
         latencies.append(elapsed_ms)
+        results.append([hit.id for hit in response.points])
+        print(f"  Query {i + 1:>3}/{len(query_vectors)}  {elapsed_ms:6.2f} ms")
 
-    avg_latency = float(np.mean(latencies))
-
-    metrics = {
-        "avg_latency_ms": avg_latency,
-        "p95_latency_ms": float(
-            np.percentile(latencies, 95)
-        ),
-        "qps": 1000 / avg_latency,
-    }
-
-    return metrics
+    return {"latencies": latencies, "results": results}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -121,8 +103,7 @@ def benchmark_search(
 # ─────────────────────────────────────────────────────────────
 
 def compute_recall(
-    client,
-    query_vectors,
+    ann_results,
     ground_truth,
     k=config.TOP_K,
 ):
@@ -131,24 +112,9 @@ def compute_recall(
 
     recalls = []
 
-    for i, q in enumerate(query_vectors):
+    for i, ann_hits in enumerate(ann_results):
 
-        response = client.query_points(
-            collection_name=config.COLLECTION_NAME,
-            query=q.tolist(),
-            limit=k,
-            search_params={
-                "hnsw_ef": config.HNSW_EF,
-                "exact": False,
-            },
-        )
-
-        ann_hits = response.points
-
-        ann_ids = {
-            hit.id for hit in ann_hits
-        }
-
+        ann_ids = set(ann_hits[:k])
         gt_ids = set(ground_truth[i][:k])
 
         recall = (
@@ -163,3 +129,7 @@ def compute_recall(
     print(f"Recall@{k}: {mean_recall:.4f}")
 
     return mean_recall
+
+
+def aggregate_latency_metrics(latencies: list) -> dict:
+    return shared_aggregate_latency_metrics(latencies)
