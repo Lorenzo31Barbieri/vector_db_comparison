@@ -2,7 +2,7 @@
   "experiment": {
     "name": "vectordb_phase2_suite",
     "seed": 42,
-    "repeats": 5,
+    "repeats": 1,
     "output_dir": "results",
     "notes": "Config-driven benchmark suite for ANN, concurrency, and filtering"
   },
@@ -18,7 +18,6 @@
   ],
   "ann": {
     "enabled": true,
-    "nprobe_values": [5, 10, 20],
     "hnsw_ef_values": [64, 128, 256]
   },
   "concurrency": {

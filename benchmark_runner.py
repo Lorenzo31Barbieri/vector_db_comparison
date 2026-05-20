@@ -8,15 +8,15 @@ import statistics
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 
+from common.backends import SUPPORTED_BACKENDS, adapter_for_backend, resolve_backends
 from common.benchmark_config import load_suite_config, write_default_suite_config
 from common.benchmark_results import ExperimentTracker, flatten_for_csv
 from common.benchmark_workloads import compute_recall_and_precision_at_k, run_concurrency_benchmark
 from common.dataset import load_sift_vectors
-from milvus.adapter import MilvusAdapter
-from qdrant.adapter import QdrantAdapter
 
 
 def _git_commit(root_dir: Path) -> str | None:
@@ -35,7 +35,7 @@ def _git_commit(root_dir: Path) -> str | None:
     return None
 
 
-def _build_manifest(config, root_dir: Path) -> dict:
+def _build_manifest(config, root_dir: Path, active_backends: Sequence[str]) -> dict:
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "experiment": {
@@ -50,7 +50,7 @@ def _build_manifest(config, root_dir: Path) -> dict:
             "query_count": config.dataset.query_count,
             "top_k": config.dataset.top_k,
         },
-        "backends": config.backends,
+        "backends": list(active_backends),
         "system": {
             "python": sys.version,
             "platform": platform.platform(),
@@ -61,14 +61,6 @@ def _build_manifest(config, root_dir: Path) -> dict:
             "commit": _git_commit(root_dir),
         },
     }
-
-
-def _adapter_for_backend(backend: str):
-    if backend == "milvus":
-        return MilvusAdapter()
-    if backend == "qdrant":
-        return QdrantAdapter()
-    raise ValueError(f"Unsupported backend '{backend}'")
 
 
 def _seed_everything(seed: int) -> None:
@@ -86,14 +78,212 @@ def _append_result(
     all_rows.append(flatten_for_csv(result))
 
 
-def run_suite(config_path: str) -> Path:
+def _run_ann_scenario(*, adapter, config, backend_name: str, dataset_size: int, dataset_name: str, query_vectors: np.ndarray, tracker: ExperimentTracker, rows: list[dict], logger: logging.Logger) -> None:
+    if not config.ann.enabled:
+        return
+
+    adapter_kwarg = "ef" if backend_name == "milvus" else "hnsw_ef"
+
+    for sweep_value in config.ann.hnsw_ef_values:
+        logger.info(
+            "Running ANN scenario backend=%s dataset_size=%s hnsw_ef=%s",
+            backend_name,
+            dataset_size,
+            sweep_value,
+        )
+
+        ground_truth = adapter.build_ground_truth(
+            query_vectors,
+            limit=config.dataset.top_k,
+        )
+
+        recall_values: list[float] = []
+        precision_values: list[float] = []
+        qps_values: list[float] = []
+        p95_values: list[float] = []
+
+        for repeat_index in range(config.experiment.repeats):
+            ann_result = adapter.run_ann(
+                query_vectors,
+                **{adapter_kwarg: sweep_value},
+                limit=config.dataset.top_k,
+            )
+            quality = compute_recall_and_precision_at_k(
+                ann_result["ids"],
+                ground_truth,
+                config.dataset.top_k,
+            )
+
+            recall_values.append(quality["recall_at_k"])
+            precision_values.append(quality["precision_at_k"])
+            qps_values.append(ann_result["latency"]["qps"])
+            p95_values.append(ann_result["latency"]["p95_ms"])
+
+            ann_row = {
+                "scenario": "ann_frontier",
+                "backend": backend_name,
+                "dataset_name": dataset_name,
+                "dataset_size": dataset_size,
+                "repeat": repeat_index + 1,
+                "params": {"hnsw_ef": sweep_value, "top_k": config.dataset.top_k},
+                "metrics": {
+                    **ann_result["latency"],
+                    **quality,
+                },
+            }
+            _append_result(tracker=tracker, all_rows=rows, result=ann_row)
+
+        summary_row = {
+            "scenario": "ann_frontier_summary",
+            "backend": backend_name,
+            "dataset_name": dataset_name,
+            "dataset_size": dataset_size,
+            "params": {"hnsw_ef": sweep_value, "top_k": config.dataset.top_k},
+            "metrics": {
+                "recall_mean": statistics.mean(recall_values),
+                "recall_std": statistics.pstdev(recall_values) if len(recall_values) > 1 else 0.0,
+                "precision_mean": statistics.mean(precision_values),
+                "qps_mean": statistics.mean(qps_values),
+                "p95_ms_mean": statistics.mean(p95_values),
+            },
+        }
+        _append_result(tracker=tracker, all_rows=rows, result=summary_row)
+
+
+def _run_concurrency_scenario(*, adapter, config, backend_name: str, dataset_size: int, dataset_name: str, query_vectors: np.ndarray, tracker: ExperimentTracker, rows: list[dict], logger: logging.Logger) -> None:
+    if not config.concurrency.enabled:
+        return
+
+    for concurrency in config.concurrency.concurrency_levels:
+        logger.info(
+            "Running concurrency scenario backend=%s dataset_size=%s concurrency=%s",
+            backend_name,
+            dataset_size,
+            concurrency,
+        )
+        for repeat_index in range(config.experiment.repeats):
+            concurrency_result = run_concurrency_benchmark(
+                query_vectors=query_vectors,
+                search_one_fn=lambda query_vector: adapter.search_one(
+                    query_vector,
+                    limit=config.dataset.top_k,
+                ),
+                concurrency=concurrency,
+            )
+            row = {
+                "scenario": "concurrency",
+                "backend": backend_name,
+                "dataset_name": dataset_name,
+                "dataset_size": dataset_size,
+                "repeat": repeat_index + 1,
+                "params": {"concurrency": concurrency, "top_k": config.dataset.top_k},
+                "metrics": concurrency_result,
+            }
+            _append_result(tracker=tracker, all_rows=rows, result=row)
+
+
+def _run_filtering_scenario(*, adapter, config, backend_name: str, dataset_size: int, dataset_name: str, query_vectors: np.ndarray, tracker: ExperimentTracker, rows: list[dict], logger: logging.Logger) -> None:
+    if not config.filtering.enabled:
+        return
+
+    for selectivity in config.filtering.selectivities:
+        logger.info(
+            "Running filtering scenario backend=%s dataset_size=%s selectivity=%s",
+            backend_name,
+            dataset_size,
+            selectivity,
+        )
+
+        filtered_gt = adapter.build_filtered_ground_truth(
+            query_vectors,
+            limit=config.dataset.top_k,
+            selectivity=selectivity,
+        )
+
+        recall_values: list[float] = []
+        precision_values: list[float] = []
+
+        for repeat_index in range(config.experiment.repeats):
+            filtered_ann = adapter.run_filtered_ann(
+                query_vectors,
+                selectivity=selectivity,
+                limit=config.dataset.top_k,
+            )
+
+            quality = compute_recall_and_precision_at_k(
+                filtered_ann["ids"],
+                filtered_gt,
+                config.dataset.top_k,
+            )
+            recall_values.append(quality["recall_at_k"])
+            precision_values.append(quality["precision_at_k"])
+
+            row = {
+                "scenario": "filtering",
+                "backend": backend_name,
+                "dataset_name": dataset_name,
+                "dataset_size": dataset_size,
+                "repeat": repeat_index + 1,
+                "params": {
+                    "selectivity": selectivity,
+                    "top_k": config.dataset.top_k,
+                },
+                "metrics": {
+                    **filtered_ann["latency"],
+                    **quality,
+                },
+            }
+            _append_result(tracker=tracker, all_rows=rows, result=row)
+
+        summary_row = {
+            "scenario": "filtering_summary",
+            "backend": backend_name,
+            "dataset_name": dataset_name,
+            "dataset_size": dataset_size,
+            "params": {
+                "selectivity": selectivity,
+                "top_k": config.dataset.top_k,
+            },
+            "metrics": {
+                "recall_mean": statistics.mean(recall_values),
+                "precision_mean": statistics.mean(precision_values),
+            },
+        }
+        _append_result(tracker=tracker, all_rows=rows, result=summary_row)
+
+
+def _run_hybrid_placeholder(*, config, backend_name: str, dataset_name: str, dataset_size: int, tracker: ExperimentTracker, rows: list[dict], logger: logging.Logger) -> None:
+    if not config.hybrid.enabled:
+        return
+
+    logger.info(
+        "Hybrid scenario enabled but backend=%s currently marked not-supported",
+        backend_name,
+    )
+    _append_result(
+        tracker=tracker,
+        all_rows=rows,
+        result={
+            "scenario": "hybrid",
+            "backend": backend_name,
+            "dataset_name": dataset_name,
+            "dataset_size": dataset_size,
+            "status": "skipped",
+            "reason": "Current dataset and backend adapters do not expose a common native hybrid API yet.",
+            "params": {"mode": config.hybrid.mode},
+        },
+    )
+
+
+def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
     root_dir = Path(__file__).resolve().parent
     config = load_suite_config(config_path)
+    selected_backends = resolve_backends(backends if backends else config.backends)
 
     _seed_everything(config.experiment.seed)
 
     tracker = ExperimentTracker(Path(config.experiment.output_dir), config.experiment.name)
-    tracker.write_manifest(_build_manifest(config, root_dir))
+    tracker.write_manifest(_build_manifest(config, root_dir, selected_backends))
 
     logger = logging.getLogger("benchmark_suite")
     logger.setLevel(logging.INFO)
@@ -104,18 +294,18 @@ def run_suite(config_path: str) -> Path:
 
     rows: list[dict] = []
 
-    for backend_name in config.backends:
-        logger.info("Starting backend=%s", backend_name)
-        adapter = _adapter_for_backend(backend_name)
+    for dataset_size in config.dataset.sizes:
+        vectors, _ = load_sift_vectors(
+            dataset_name=config.dataset.name,
+            dataset_size=dataset_size,
+            as_numpy=True,
+        )
+        vectors = vectors.astype(np.float32)
+        query_vectors = vectors[: config.dataset.query_count]
 
-        for dataset_size in config.dataset.sizes:
-            vectors, _ = load_sift_vectors(
-                dataset_name=config.dataset.name,
-                dataset_size=dataset_size,
-                as_numpy=True,
-            )
-            vectors = vectors.astype(np.float32)
-            query_vectors = vectors[: config.dataset.query_count]
+        for backend_name in selected_backends:
+            logger.info("Starting backend=%s dataset_size=%s", backend_name, dataset_size)
+            adapter = adapter_for_backend(backend_name)
 
             adapter.configure(
                 dataset_name=config.dataset.name,
@@ -148,188 +338,48 @@ def run_suite(config_path: str) -> Path:
             }
             _append_result(tracker=tracker, all_rows=rows, result=lifecycle_row)
 
-            if config.ann.enabled:
-                if backend_name == "milvus":
-                    sweep_values = config.ann.nprobe_values
-                    sweep_key = "nprobe"
-                else:
-                    sweep_values = config.ann.hnsw_ef_values
-                    sweep_key = "hnsw_ef"
-
-                for sweep_value in sweep_values:
-                    logger.info(
-                        "Running ANN scenario backend=%s dataset_size=%s %s=%s",
-                        backend_name,
-                        dataset_size,
-                        sweep_key,
-                        sweep_value,
-                    )
-                    recall_values: list[float] = []
-                    precision_values: list[float] = []
-                    qps_values: list[float] = []
-                    p95_values: list[float] = []
-
-                    for repeat_index in range(config.experiment.repeats):
-                        ground_truth = adapter.build_ground_truth(
-                            query_vectors,
-                            limit=config.dataset.top_k,
-                        )
-
-                        ann_result = adapter.run_ann(
-                            query_vectors,
-                            **{sweep_key: sweep_value},
-                            limit=config.dataset.top_k,
-                        )
-                        quality = compute_recall_and_precision_at_k(
-                            ann_result["ids"],
-                            ground_truth,
-                            config.dataset.top_k,
-                        )
-
-                        recall_values.append(quality["recall_at_k"])
-                        precision_values.append(quality["precision_at_k"])
-                        qps_values.append(ann_result["latency"]["qps"])
-                        p95_values.append(ann_result["latency"]["p95_ms"])
-
-                        ann_row = {
-                            "scenario": "ann_frontier",
-                            "backend": backend_name,
-                            "dataset_name": config.dataset.name,
-                            "dataset_size": dataset_size,
-                            "repeat": repeat_index + 1,
-                            "params": {sweep_key: sweep_value, "top_k": config.dataset.top_k},
-                            "metrics": {
-                                **ann_result["latency"],
-                                **quality,
-                            },
-                        }
-                        _append_result(tracker=tracker, all_rows=rows, result=ann_row)
-
-                    summary_row = {
-                        "scenario": "ann_frontier_summary",
-                        "backend": backend_name,
-                        "dataset_name": config.dataset.name,
-                        "dataset_size": dataset_size,
-                        "params": {sweep_key: sweep_value, "top_k": config.dataset.top_k},
-                        "metrics": {
-                            "recall_mean": statistics.mean(recall_values),
-                            "recall_std": statistics.pstdev(recall_values) if len(recall_values) > 1 else 0.0,
-                            "precision_mean": statistics.mean(precision_values),
-                            "qps_mean": statistics.mean(qps_values),
-                            "p95_ms_mean": statistics.mean(p95_values),
-                        },
-                    }
-                    _append_result(tracker=tracker, all_rows=rows, result=summary_row)
-
-            if config.concurrency.enabled:
-                for concurrency in config.concurrency.concurrency_levels:
-                    logger.info(
-                        "Running concurrency scenario backend=%s dataset_size=%s concurrency=%s",
-                        backend_name,
-                        dataset_size,
-                        concurrency,
-                    )
-                    for repeat_index in range(config.experiment.repeats):
-                        concurrency_result = run_concurrency_benchmark(
-                            query_vectors=query_vectors,
-                            search_one_fn=lambda query_vector: adapter.search_one(
-                                query_vector,
-                                limit=config.dataset.top_k,
-                            ),
-                            concurrency=concurrency,
-                        )
-                        row = {
-                            "scenario": "concurrency",
-                            "backend": backend_name,
-                            "dataset_name": config.dataset.name,
-                            "dataset_size": dataset_size,
-                            "repeat": repeat_index + 1,
-                            "params": {"concurrency": concurrency, "top_k": config.dataset.top_k},
-                            "metrics": concurrency_result,
-                        }
-                        _append_result(tracker=tracker, all_rows=rows, result=row)
-
-            if config.filtering.enabled:
-                for selectivity in config.filtering.selectivities:
-                    logger.info(
-                        "Running filtering scenario backend=%s dataset_size=%s selectivity=%s",
-                        backend_name,
-                        dataset_size,
-                        selectivity,
-                    )
-                    recall_values = []
-                    precision_values = []
-                    for repeat_index in range(config.experiment.repeats):
-                        filtered_gt = adapter.build_filtered_ground_truth(
-                            query_vectors,
-                            limit=config.dataset.top_k,
-                            selectivity=selectivity,
-                        )
-                        filtered_ann = adapter.run_filtered_ann(
-                            query_vectors,
-                            selectivity=selectivity,
-                            limit=config.dataset.top_k,
-                        )
-
-                        quality = compute_recall_and_precision_at_k(
-                            filtered_ann["ids"],
-                            filtered_gt,
-                            config.dataset.top_k,
-                        )
-                        recall_values.append(quality["recall_at_k"])
-                        precision_values.append(quality["precision_at_k"])
-
-                        row = {
-                            "scenario": "filtering",
-                            "backend": backend_name,
-                            "dataset_name": config.dataset.name,
-                            "dataset_size": dataset_size,
-                            "repeat": repeat_index + 1,
-                            "params": {
-                                "selectivity": selectivity,
-                                "top_k": config.dataset.top_k,
-                            },
-                            "metrics": {
-                                **filtered_ann["latency"],
-                                **quality,
-                            },
-                        }
-                        _append_result(tracker=tracker, all_rows=rows, result=row)
-
-                    summary_row = {
-                        "scenario": "filtering_summary",
-                        "backend": backend_name,
-                        "dataset_name": config.dataset.name,
-                        "dataset_size": dataset_size,
-                        "params": {
-                            "selectivity": selectivity,
-                            "top_k": config.dataset.top_k,
-                        },
-                        "metrics": {
-                            "recall_mean": statistics.mean(recall_values),
-                            "precision_mean": statistics.mean(precision_values),
-                        },
-                    }
-                    _append_result(tracker=tracker, all_rows=rows, result=summary_row)
-
-            if config.hybrid.enabled:
-                logger.info(
-                    "Hybrid scenario enabled but backend=%s currently marked not-supported",
-                    backend_name,
-                )
-                _append_result(
-                    tracker=tracker,
-                    all_rows=rows,
-                    result={
-                        "scenario": "hybrid",
-                        "backend": backend_name,
-                        "dataset_name": config.dataset.name,
-                        "dataset_size": dataset_size,
-                        "status": "skipped",
-                        "reason": "Current dataset and backend adapters do not expose a common native hybrid API yet.",
-                        "params": {"mode": config.hybrid.mode},
-                    },
-                )
+            _run_ann_scenario(
+                adapter=adapter,
+                config=config,
+                backend_name=backend_name,
+                dataset_size=dataset_size,
+                dataset_name=config.dataset.name,
+                query_vectors=query_vectors,
+                tracker=tracker,
+                rows=rows,
+                logger=logger,
+            )
+            _run_concurrency_scenario(
+                adapter=adapter,
+                config=config,
+                backend_name=backend_name,
+                dataset_size=dataset_size,
+                dataset_name=config.dataset.name,
+                query_vectors=query_vectors,
+                tracker=tracker,
+                rows=rows,
+                logger=logger,
+            )
+            _run_filtering_scenario(
+                adapter=adapter,
+                config=config,
+                backend_name=backend_name,
+                dataset_size=dataset_size,
+                dataset_name=config.dataset.name,
+                query_vectors=query_vectors,
+                tracker=tracker,
+                rows=rows,
+                logger=logger,
+            )
+            _run_hybrid_placeholder(
+                config=config,
+                backend_name=backend_name,
+                dataset_name=config.dataset.name,
+                dataset_size=dataset_size,
+                tracker=tracker,
+                rows=rows,
+                logger=logger,
+            )
 
     tracker.write_csv(rows)
     logger.info("Benchmark suite complete: %s", tracker.run_dir)
@@ -348,6 +398,13 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Write a default benchmark config at --config and exit",
     )
+    parser.add_argument(
+        "--backend",
+        dest="backends",
+        action="append",
+        choices=list(SUPPORTED_BACKENDS),
+        help="Backend to run. Repeat to run multiple backends. If omitted, uses config backends.",
+    )
     return parser.parse_args()
 
 
@@ -359,7 +416,7 @@ def main() -> None:
         print(f"Default suite config written to: {path}")
         return
 
-    run_dir = run_suite(args.config)
+    run_dir = run_suite(args.config, backends=args.backends)
     print(f"\nBenchmark suite complete. Results saved in: {run_dir}")
 
 

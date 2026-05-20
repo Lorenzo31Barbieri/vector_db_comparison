@@ -4,7 +4,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from common.benchmark_workloads import selectivity_to_filter_bucket
 from common.perf import aggregate_latency_metrics
+from common.runtime_config import apply_runtime_overrides
 from milvus import benchmark as milvus_benchmark
 from milvus import config as milvus_config
 from milvus import db as milvus_db
@@ -24,12 +26,15 @@ class MilvusAdapter:
         batch_size: int,
         warm_up_queries: int,
     ) -> None:
-        milvus_config.DATASET_NAME = dataset_name
-        milvus_config.DATASET_SIZE = dataset_size
-        milvus_config.TOP_K = top_k
-        milvus_config.NQ = query_count
-        milvus_config.BATCH_SIZE = batch_size
-        milvus_config.WARM_UP_QUERIES = warm_up_queries
+        apply_runtime_overrides(
+            milvus_config,
+            dataset_name=dataset_name,
+            dataset_size=dataset_size,
+            top_k=top_k,
+            query_count=query_count,
+            batch_size=batch_size,
+            warm_up_queries=warm_up_queries,
+        )
 
     def prepare(self, vectors: np.ndarray) -> dict:
         milvus_db.connect()
@@ -57,11 +62,11 @@ class MilvusAdapter:
     def warm_up(self, query_vectors: np.ndarray) -> None:
         milvus_benchmark.warm_up(self.collection, query_vectors.tolist())
 
-    def run_ann(self, query_vectors: np.ndarray, *, nprobe: int | None = None, limit: int | None = None) -> dict:
+    def run_ann(self, query_vectors: np.ndarray, *, ef: int | None = None, limit: int | None = None) -> dict:
         benchmark_result = milvus_benchmark.run_single_query_benchmark(
             self.collection,
             query_vectors.tolist(),
-            nprobe=nprobe,
+            ef=ef,
             limit=limit,
         )
         return {
@@ -70,25 +75,17 @@ class MilvusAdapter:
             "raw": benchmark_result,
         }
 
-    def run_ann_batch(self, query_vectors: np.ndarray, *, nprobe: int | None = None, limit: int | None = None) -> dict:
-        return milvus_benchmark.run_batch_query_benchmark(
-            self.collection,
-            query_vectors.tolist(),
-            nprobe=nprobe,
-            limit=limit,
-        )
-
     def build_ground_truth(self, query_vectors: np.ndarray, *, limit: int) -> list[list[int]]:
         results = milvus_benchmark.search(
             self.collection,
             query_vectors.tolist(),
-            nprobe=milvus_config.NLIST,
+            ef=milvus_config.HNSW_EF * 4,
             limit=limit,
         )
         return milvus_benchmark.extract_hit_ids(list(results), k=limit)
 
     def build_filtered_ground_truth(self, query_vectors: np.ndarray, *, limit: int, selectivity: float) -> list[list[int]]:
-        threshold = self._selectivity_threshold(selectivity)
+        threshold = selectivity_to_filter_bucket(selectivity)
         expr = f"bucket < {threshold}"
         results = milvus_benchmark.build_ground_truth_filtered(
             self.collection,
@@ -103,16 +100,16 @@ class MilvusAdapter:
         query_vectors: np.ndarray,
         *,
         selectivity: float,
-        nprobe: int | None = None,
+        ef: int | None = None,
         limit: int | None = None,
     ) -> dict:
-        threshold = self._selectivity_threshold(selectivity)
+        threshold = selectivity_to_filter_bucket(selectivity)
         expr = f"bucket < {threshold}"
         benchmark_result = milvus_benchmark.run_single_query_benchmark(
             self.collection,
             query_vectors.tolist(),
             expr=expr,
-            nprobe=nprobe,
+            ef=ef,
             limit=limit,
         )
         effective_k = limit or milvus_config.TOP_K
@@ -123,17 +120,12 @@ class MilvusAdapter:
             "filter_expr": expr,
         }
 
-    def search_one(self, query_vector: np.ndarray, *, nprobe: int | None = None, limit: int | None = None) -> list[int]:
+    def search_one(self, query_vector: np.ndarray, *, ef: int | None = None, limit: int | None = None) -> list[int]:
         hits = milvus_benchmark.search(
             self.collection,
             [query_vector.tolist()],
-            nprobe=nprobe,
+            ef=ef,
             limit=limit,
         )[0]
         effective_k = limit or milvus_config.TOP_K
         return [hit.id for hit in hits[:effective_k]]
-
-    @staticmethod
-    def _selectivity_threshold(selectivity: float) -> int:
-        bounded = max(0.0, min(1.0, float(selectivity)))
-        return max(1, int(round(100 * bounded)))

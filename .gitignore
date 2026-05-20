@@ -6,3 +6,4 @@ qdrant_storage
 .vscode
 .venv-smoke
 results
+benchmark_results.csv

@@ -6,7 +6,9 @@ import threading
 import numpy as np
 from qdrant_client import QdrantClient
 
+from common.benchmark_workloads import selectivity_to_filter_bucket
 from common.perf import aggregate_latency_metrics
+from common.runtime_config import apply_runtime_overrides
 from qdrant import benchmark as qdrant_benchmark
 from qdrant import config as qdrant_config
 from qdrant import db as qdrant_db
@@ -26,12 +28,15 @@ class QdrantAdapter:
         batch_size: int,
         warm_up_queries: int,
     ) -> None:
-        qdrant_config.DATASET_NAME = dataset_name
-        qdrant_config.DATASET_SIZE = dataset_size
-        qdrant_config.TOP_K = top_k
-        qdrant_config.NQ = query_count
-        qdrant_config.BATCH_SIZE = batch_size
-        qdrant_config.WARM_UP_QUERIES = warm_up_queries
+        apply_runtime_overrides(
+            qdrant_config,
+            dataset_name=dataset_name,
+            dataset_size=dataset_size,
+            top_k=top_k,
+            query_count=query_count,
+            batch_size=batch_size,
+            warm_up_queries=warm_up_queries,
+        )
 
     def prepare(self, vectors: np.ndarray) -> dict:
         client = qdrant_db.connect()
@@ -86,7 +91,7 @@ class QdrantAdapter:
         return qdrant_benchmark.build_ground_truth(self.client, query_vectors, limit=limit)
 
     def build_filtered_ground_truth(self, query_vectors: np.ndarray, *, limit: int, selectivity: float) -> list[list[int]]:
-        query_filter = qdrant_benchmark.build_bucket_filter(self._selectivity_threshold(selectivity))
+        query_filter = qdrant_benchmark.build_bucket_filter(selectivity_to_filter_bucket(selectivity))
         return qdrant_benchmark.build_ground_truth(
             self.client,
             query_vectors,
@@ -102,7 +107,8 @@ class QdrantAdapter:
         hnsw_ef: int | None = None,
         limit: int | None = None,
     ) -> dict:
-        query_filter = qdrant_benchmark.build_bucket_filter(self._selectivity_threshold(selectivity))
+        threshold = selectivity_to_filter_bucket(selectivity)
+        query_filter = qdrant_benchmark.build_bucket_filter(threshold)
         benchmark_result = qdrant_benchmark.run_single_query_benchmark(
             self.client,
             query_vectors,
@@ -114,7 +120,7 @@ class QdrantAdapter:
             "ids": benchmark_result["results"],
             "latency": aggregate_latency_metrics(benchmark_result["latencies"]),
             "raw": benchmark_result,
-            "filter_expr": {"bucket_lt": self._selectivity_threshold(selectivity)},
+            "filter_expr": {"bucket_lt": threshold},
         }
 
     def search_one(self, query_vector: np.ndarray, *, hnsw_ef: int | None = None, limit: int | None = None) -> list[int]:
@@ -128,8 +134,3 @@ class QdrantAdapter:
         )
         effective_k = limit or qdrant_config.TOP_K
         return [hit.id for hit in response.points[:effective_k]]
-
-    @staticmethod
-    def _selectivity_threshold(selectivity: float) -> int:
-        bounded = max(0.0, min(1.0, float(selectivity)))
-        return max(1, int(round(100 * bounded)))

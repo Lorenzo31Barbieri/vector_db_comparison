@@ -10,32 +10,20 @@ except ImportError:
 from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
 
 
-# ── Search helpers ────────────────────────────────────────────────────────────
-
-def _search(collection: Collection, vectors: list) -> list:
-    """Run a single search call (one or many query vectors)."""
-    return collection.search(
-        data=vectors,
-        anns_field="vector",
-        param={"metric_type": config.METRIC_TYPE, "params": {"nprobe": config.NPROBE}},
-        limit=config.TOP_K,
-    )
-
-
 def search(
     collection: Collection,
     vectors: list,
     *,
     expr: str | None = None,
-    nprobe: int | None = None,
+    ef: int | None = None,
     limit: int | None = None,
 ) -> list:
-    effective_nprobe = config.NPROBE if nprobe is None else int(nprobe)
+    effective_ef = config.HNSW_EF if ef is None else int(ef)
     effective_limit = config.TOP_K if limit is None else int(limit)
     return collection.search(
         data=vectors,
         anns_field="vector",
-        param={"metric_type": config.METRIC_TYPE, "params": {"nprobe": effective_nprobe}},
+        param={"metric_type": config.METRIC_TYPE, "params": {"ef": effective_ef}},
         limit=effective_limit,
         expr=expr,
     )
@@ -61,7 +49,7 @@ def run_single_query_benchmark(
     query_vectors: list,
     *,
     expr: str | None = None,
-    nprobe: int | None = None,
+    ef: int | None = None,
     limit: int | None = None,
 ) -> dict:
     """
@@ -79,7 +67,7 @@ def run_single_query_benchmark(
 
     for i, qv in enumerate(query_vectors):
         t0 = time.perf_counter()
-        res = search(collection, [qv], expr=expr, nprobe=nprobe, limit=limit)
+        res = search(collection, [qv], expr=expr, ef=ef, limit=limit)
         latency_ms = (time.perf_counter() - t0) * 1000
         latencies.append(latency_ms)
         results.append(res[0])
@@ -95,7 +83,7 @@ def run_batch_query_benchmark(
     query_vectors: list,
     *,
     expr: str | None = None,
-    nprobe: int | None = None,
+    ef: int | None = None,
     limit: int | None = None,
 ) -> dict:
     """
@@ -110,7 +98,7 @@ def run_batch_query_benchmark(
     """
     print(f"\nRunning batch-query benchmark ({len(query_vectors)} queries in one call)...")
     t0 = time.perf_counter()
-    results = search(collection, query_vectors, expr=expr, nprobe=nprobe, limit=limit)
+    results = search(collection, query_vectors, expr=expr, ef=ef, limit=limit)
     batch_time_ms = (time.perf_counter() - t0) * 1000
     batch_qps = len(query_vectors) / (batch_time_ms / 1000)
     print(f"  Batch completed in {batch_time_ms:.2f} ms  ({batch_qps:.0f} QPS)")
@@ -143,10 +131,10 @@ def compute_recall(
 
 def build_ground_truth(collection: Collection, query_vectors: list) -> list:
     """
-    Brute-force ground truth: search with nprobe == nlist (exhaustive IVF).
+    Near-exhaustive ground truth: search with a large ef to maximise recall.
     """
     print("\nBuilding brute-force ground truth for recall computation...")
-    results = search(collection, query_vectors, nprobe=config.NLIST)
+    results = search(collection, query_vectors, ef=config.HNSW_EF * 4)
     return list(results)
 
 
@@ -157,7 +145,7 @@ def build_ground_truth_filtered(
     *,
     limit: int,
 ) -> list:
-    return list(search(collection, query_vectors, expr=expr, nprobe=config.NLIST, limit=limit))
+    return list(search(collection, query_vectors, expr=expr, ef=config.HNSW_EF * 4, limit=limit))
 
 
 def extract_hit_ids(results: list, *, k: int) -> list[list[int]]:

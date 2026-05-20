@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from common.backends import resolve_backends
+
 
 @dataclass
 class ExperimentConfig:
@@ -30,7 +32,6 @@ class ScenarioConfig:
 
 @dataclass
 class AnnScenarioConfig(ScenarioConfig):
-    nprobe_values: list[int] = field(default_factory=lambda: [5, 10, 20])
     hnsw_ef_values: list[int] = field(default_factory=lambda: [64, 128, 256])
 
 
@@ -77,7 +78,6 @@ DEFAULT_CONFIG = {
     "backends": ["milvus", "qdrant"],
     "ann": {
         "enabled": True,
-        "nprobe_values": [5, 10, 20],
         "hnsw_ef_values": [64, 128, 256],
     },
     "concurrency": {
@@ -114,7 +114,7 @@ def load_suite_config(config_path: str | Path) -> SuiteConfig:
     return SuiteConfig(
         experiment=experiment,
         dataset=dataset,
-        backends=list(raw["backends"]),
+        backends=resolve_backends(raw["backends"]),
         ann=ann,
         concurrency=concurrency,
         filtering=filtering,

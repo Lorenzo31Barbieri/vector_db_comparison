@@ -90,11 +90,11 @@ def build_index(collection: Collection, num_vectors: int) -> dict:
     -------
     dict with keys: index_time (s), index_throughput (vectors/s)
     """
-    print(f"\nBuilding {config.INDEX_TYPE} index (nlist={config.NLIST})...")
+    print(f"\nBuilding {config.INDEX_TYPE} index (M={config.HNSW_M}, efConstruction={config.HNSW_EF_CONSTRUCT})...")
     index_params = {
         "index_type": config.INDEX_TYPE,
         "metric_type": config.METRIC_TYPE,
-        "params": {"nlist": config.NLIST},
+        "params": {"M": config.HNSW_M, "efConstruction": config.HNSW_EF_CONSTRUCT},
     }
 
     start = time.time()

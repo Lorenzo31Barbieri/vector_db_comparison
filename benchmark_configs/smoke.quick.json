@@ -18,7 +18,6 @@
   ],
   "ann": {
     "enabled": true,
-    "nprobe_values": [5],
     "hnsw_ef_values": [64]
   },
   "concurrency": {

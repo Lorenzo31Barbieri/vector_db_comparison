@@ -8,6 +8,18 @@ def safe_throughput(count: int, elapsed_seconds: float) -> float:
 
 
 def aggregate_latency_metrics(latencies_ms: list[float]) -> dict:
+    if not latencies_ms:
+        return {
+            "avg_ms": 0.0,
+            "min_ms": 0.0,
+            "max_ms": 0.0,
+            "median_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "stddev_ms": 0.0,
+            "qps": 0.0,
+        }
+
     arr = np.array(latencies_ms)
     avg = float(np.mean(arr))
     return {

@@ -9,18 +9,6 @@ except ImportError:
 from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
 
 
-def _search(client, query_vector, *, exact: bool):
-    return client.query_points(
-        collection_name=config.COLLECTION_NAME,
-        query=query_vector.tolist(),
-        limit=config.TOP_K,
-        search_params={
-            "hnsw_ef": config.HNSW_EF,
-            "exact": exact,
-        },
-    )
-
-
 def search(
     client,
     query_vector,
