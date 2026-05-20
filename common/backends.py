@@ -4,17 +4,17 @@ from collections.abc import Sequence
 
 from milvus.adapter import MilvusAdapter
 from qdrant.adapter import QdrantAdapter
+from weaviate_backend.adapter import WeaviateAdapter
 
-SUPPORTED_BACKENDS: tuple[str, ...] = ("milvus", "qdrant")
-
+SUPPORTED_BACKENDS: tuple[str, ...] = ("milvus", "qdrant", "weaviate")
 
 def adapter_for_backend(backend: str):
     if backend == "milvus":
         return MilvusAdapter()
     if backend == "qdrant":
         return QdrantAdapter()
-    raise ValueError(f"Unsupported backend '{backend}'")
-
+    if backend == "weaviate":
+        return WeaviateAdapter()
 
 def resolve_backends(backends: Sequence[str]) -> list[str]:
     resolved: list[str] = []

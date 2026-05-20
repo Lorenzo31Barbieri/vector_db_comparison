@@ -7,3 +7,4 @@ qdrant_storage
 .venv-smoke
 results
 benchmark_results.csv
+.DS_Store

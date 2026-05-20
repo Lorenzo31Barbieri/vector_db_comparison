@@ -1,6 +1,8 @@
 # Vector DB Comparison
 
-Configuration-driven benchmark suite for **Milvus** and **Qdrant** on the [SIFT-128-euclidean](https://huggingface.co/datasets/open-vdb/sift-128-euclidean) dataset.
+Configuration-driven benchmark suite for **Milvus**, **Qdrant**, and **Weaviate** on the [SIFT-128-euclidean](https://huggingface.co/datasets/open-vdb/sift-128-euclidean) dataset.
+
+Weaviate runtime modules are available under `weaviate/` (`config.py`, `db.py`, `benchmark.py`, `adapter.py`) and are enabled in suite execution.
 
 ## Supported execution modes
 
@@ -8,15 +10,16 @@ The project supports all required modes through one architecture:
 
 1. **Milvus independently**
 2. **Qdrant independently**
-3. **Milvus vs Qdrant comparison in one run**
+3. **Weaviate independently**
+4. **Cross-backend comparison in one run**
 
 ## Architecture (refactored)
 
 - `benchmark_runner.py`: single orchestrator for lifecycle + scenarios
 - `common/backends.py`: backend registry + validation
 - `common/benchmark_config.py`: typed suite config loading
-- `milvus/adapter.py`, `qdrant/adapter.py`: backend-specific integration only
-- `milvus/main.py`, `qdrant/main.py`: thin wrappers that call the shared runner in single-backend mode
+- `milvus/adapter.py`, `qdrant/adapter.py`, `weaviate/adapter.py`: backend-specific integration only
+- `milvus/main.py`, `qdrant/main.py`, `weaviate/main.py`: thin wrappers that call the shared runner in single-backend mode
 
 This keeps benchmark flow centralized while preserving backend-specific implementation details.
 
@@ -111,6 +114,26 @@ Option 2:
 python qdrant/main.py --config benchmark_configs/suite.default.json
 ```
 
+### D) Run only Weaviate
+
+Option 1:
+
+```bash
+python benchmark_runner.py --config benchmark_configs/suite.default.json --backend weaviate
+```
+
+Option 2:
+
+```bash
+python weaviate/main.py --config benchmark_configs/suite.default.json
+```
+
+Optional runtime smoke test:
+
+```bash
+python weaviate/smoke.py
+```
+
 ## Output
 
 Each run writes a timestamped directory under `results/` with:
@@ -134,7 +157,7 @@ Benchmark configuration is fully JSON-driven via `benchmark_configs/*.json`.
 
 Key fields:
 
-- `backends`: `["milvus", "qdrant"]` (or one of them)
+- `backends`: `["milvus", "qdrant", "weaviate"]` (or a subset)
 - `dataset.sizes`, `dataset.query_count`, `dataset.top_k`
 - `ann.hnsw_ef_values`
 - `concurrency.concurrency_levels`

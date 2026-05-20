@@ -307,79 +307,84 @@ def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
             logger.info("Starting backend=%s dataset_size=%s", backend_name, dataset_size)
             adapter = adapter_for_backend(backend_name)
 
-            adapter.configure(
-                dataset_name=config.dataset.name,
-                dataset_size=dataset_size,
-                top_k=config.dataset.top_k,
-                query_count=config.dataset.query_count,
-                batch_size=10_000,
-                warm_up_queries=min(10, config.dataset.query_count),
-            )
+            try:
+                adapter.configure(
+                    dataset_name=config.dataset.name,
+                    dataset_size=dataset_size,
+                    top_k=config.dataset.top_k,
+                    query_count=config.dataset.query_count,
+                    batch_size=10_000,
+                    warm_up_queries=min(10, config.dataset.query_count),
+                )
 
-            lifecycle = adapter.prepare(vectors)
-            adapter.warm_up(query_vectors)
-            logger.info("Prepared backend=%s dataset_size=%s", backend_name, dataset_size)
+                lifecycle = adapter.prepare(vectors)
+                adapter.warm_up(query_vectors)
+                logger.info("Prepared backend=%s dataset_size=%s", backend_name, dataset_size)
 
-            lifecycle_row = {
-                "scenario": "lifecycle",
-                "backend": backend_name,
-                "dataset_name": config.dataset.name,
-                "dataset_size": dataset_size,
-                "top_k": config.dataset.top_k,
-                "metrics": {
-                    "insert_time_s": lifecycle["insert"].get("insert_time"),
-                    "insert_throughput_vps": lifecycle["insert"].get("throughput"),
-                    "index_time_s": lifecycle["index"].get("index_time"),
-                    "index_throughput_vps": lifecycle["index"].get("index_throughput"),
-                    "load_time_s": lifecycle["load"].get("load_time"),
-                    "memory_mb": lifecycle.get("memory_mb"),
-                    "storage_mb": lifecycle.get("storage_mb"),
-                },
-            }
-            _append_result(tracker=tracker, all_rows=rows, result=lifecycle_row)
+                lifecycle_row = {
+                    "scenario": "lifecycle",
+                    "backend": backend_name,
+                    "dataset_name": config.dataset.name,
+                    "dataset_size": dataset_size,
+                    "top_k": config.dataset.top_k,
+                    "metrics": {
+                        "insert_time_s": lifecycle["insert"].get("insert_time"),
+                        "insert_throughput_vps": lifecycle["insert"].get("throughput"),
+                        "index_time_s": lifecycle["index"].get("index_time"),
+                        "index_throughput_vps": lifecycle["index"].get("index_throughput"),
+                        "load_time_s": lifecycle["load"].get("load_time"),
+                        "memory_mb": lifecycle.get("memory_mb"),
+                        "storage_mb": lifecycle.get("storage_mb"),
+                    },
+                }
+                _append_result(tracker=tracker, all_rows=rows, result=lifecycle_row)
 
-            _run_ann_scenario(
-                adapter=adapter,
-                config=config,
-                backend_name=backend_name,
-                dataset_size=dataset_size,
-                dataset_name=config.dataset.name,
-                query_vectors=query_vectors,
-                tracker=tracker,
-                rows=rows,
-                logger=logger,
-            )
-            _run_concurrency_scenario(
-                adapter=adapter,
-                config=config,
-                backend_name=backend_name,
-                dataset_size=dataset_size,
-                dataset_name=config.dataset.name,
-                query_vectors=query_vectors,
-                tracker=tracker,
-                rows=rows,
-                logger=logger,
-            )
-            _run_filtering_scenario(
-                adapter=adapter,
-                config=config,
-                backend_name=backend_name,
-                dataset_size=dataset_size,
-                dataset_name=config.dataset.name,
-                query_vectors=query_vectors,
-                tracker=tracker,
-                rows=rows,
-                logger=logger,
-            )
-            _run_hybrid_placeholder(
-                config=config,
-                backend_name=backend_name,
-                dataset_name=config.dataset.name,
-                dataset_size=dataset_size,
-                tracker=tracker,
-                rows=rows,
-                logger=logger,
-            )
+                _run_ann_scenario(
+                    adapter=adapter,
+                    config=config,
+                    backend_name=backend_name,
+                    dataset_size=dataset_size,
+                    dataset_name=config.dataset.name,
+                    query_vectors=query_vectors,
+                    tracker=tracker,
+                    rows=rows,
+                    logger=logger,
+                )
+                _run_concurrency_scenario(
+                    adapter=adapter,
+                    config=config,
+                    backend_name=backend_name,
+                    dataset_size=dataset_size,
+                    dataset_name=config.dataset.name,
+                    query_vectors=query_vectors,
+                    tracker=tracker,
+                    rows=rows,
+                    logger=logger,
+                )
+                _run_filtering_scenario(
+                    adapter=adapter,
+                    config=config,
+                    backend_name=backend_name,
+                    dataset_size=dataset_size,
+                    dataset_name=config.dataset.name,
+                    query_vectors=query_vectors,
+                    tracker=tracker,
+                    rows=rows,
+                    logger=logger,
+                )
+                _run_hybrid_placeholder(
+                    config=config,
+                    backend_name=backend_name,
+                    dataset_name=config.dataset.name,
+                    dataset_size=dataset_size,
+                    tracker=tracker,
+                    rows=rows,
+                    logger=logger,
+                )
+            finally:
+                teardown = getattr(adapter, "teardown", None)
+                if callable(teardown):
+                    teardown()
 
     tracker.write_csv(rows)
     logger.info("Benchmark suite complete: %s", tracker.run_dir)

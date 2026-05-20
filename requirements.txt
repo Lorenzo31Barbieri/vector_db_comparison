@@ -2,3 +2,4 @@ numpy
 datasets
 qdrant_client
 pymilvus
+weaviate-client

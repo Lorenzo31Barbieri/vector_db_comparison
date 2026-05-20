@@ -75,7 +75,7 @@ DEFAULT_CONFIG = {
         "query_count": 200,
         "top_k": 10,
     },
-    "backends": ["milvus", "qdrant"],
+    "backends": ["milvus", "qdrant", "weaviate"],
     "ann": {
         "enabled": True,
         "hnsw_ef_values": [64, 128, 256],

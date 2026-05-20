@@ -14,7 +14,8 @@
   },
   "backends": [
     "milvus",
-    "qdrant"
+    "qdrant",
+    "weaviate"
   ],
   "ann": {
     "enabled": true,
