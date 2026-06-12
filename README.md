@@ -145,7 +145,7 @@ Each run writes a timestamped directory under `results/` with:
 
 ## Scenarios
 
-- `lifecycle`: insert/index/load + memory/storage
+- `lifecycle`: insert/index/load
 - `ann_frontier`: recall/precision/latency/QPS sweep over HNSW ef
 - `concurrency`: throughput and tail latency under concurrent search
 - `filtering`: filtered ANN quality and latency by selectivity

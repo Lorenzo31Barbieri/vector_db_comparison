@@ -61,9 +61,6 @@ class WeaviateAdapter:
         insert_stats = weaviate_db.insert_vectors(client, vector_list)
         index_stats = weaviate_db.build_index(client, len(vector_list))
 
-        memory_mb = weaviate_db.estimate_memory_mb(client)
-        storage_mb = weaviate_db.estimate_storage_mb(client)
-
         self.client = client
         self.collection = client.collections.get(weaviate_config.COLLECTION_NAME)
         self._thread_local = threading.local()
@@ -74,8 +71,6 @@ class WeaviateAdapter:
             "insert": insert_stats,
             "index": index_stats,
             "load": {"load_time": None},
-            "memory_mb": memory_mb,
-            "storage_mb": storage_mb,
             "dimension": int(vectors.shape[1]),
         }
 

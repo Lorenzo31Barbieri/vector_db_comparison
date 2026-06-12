@@ -54,17 +54,12 @@ class MilvusAdapter:
         index_stats = milvus_db.build_index(collection, len(vector_list))
         load_stats = milvus_db.load_collection(collection)
 
-        segments = milvus_db.get_segment_info()
-        memory_mb = milvus_db.estimate_memory_mb(segments)
-
         self.collection = collection
 
         return {
             "insert": insert_stats,
             "index": index_stats,
             "load": load_stats,
-            "memory_mb": memory_mb,
-            "storage_mb": None,
             "dimension": int(vectors.shape[1]),
         }
 

@@ -55,9 +55,6 @@ class QdrantAdapter:
         insert_stats = qdrant_db.insert_vectors(client, vector_list)
         index_stats = qdrant_db.build_index(client, len(vector_list))
 
-        memory_mb = qdrant_db.estimate_memory_mb(client, int(vectors.shape[1]), len(vector_list))
-        storage_mb = qdrant_db.estimate_storage_mb(client)
-
         self.client = client
         self._thread_local = threading.local()
 
@@ -65,8 +62,6 @@ class QdrantAdapter:
             "insert": insert_stats,
             "index": index_stats,
             "load": {"load_time": None},
-            "memory_mb": memory_mb,
-            "storage_mb": storage_mb,
             "dimension": int(vectors.shape[1]),
         }
 

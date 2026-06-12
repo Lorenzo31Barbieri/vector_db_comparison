@@ -150,23 +150,3 @@ def build_index(
         "index_time": elapsed,
         "index_throughput": throughput,
     }
-
-
-def estimate_memory_mb(client: weaviate.WeaviateClient) -> float | None:
-    try:
-        collection = client.collections.get(config.COLLECTION_NAME)
-        aggregate = collection.aggregate.over_all(total_count=True)
-        object_count = int(getattr(aggregate, "total_count", 0) or 0)
-        if object_count == 0:
-            return 0.0
-        return None
-    except Exception:
-        return None
-
-
-def estimate_storage_mb(client: weaviate.WeaviateClient) -> float | None:
-    try:
-        _ = client.collections.get(config.COLLECTION_NAME)
-        return None
-    except Exception:
-        return None

@@ -142,17 +142,3 @@ def load_collection(collection: Collection) -> dict:
     print(f"Loaded in {elapsed:.2f}s")
     return {"load_time": elapsed}
 
-
-# ── Segment / memory info ─────────────────────────────────────────────────────
-
-def get_segment_info() -> list:
-    return utility.get_query_segment_info(config.COLLECTION_NAME)
-
-
-def estimate_memory_mb(segments: list) -> float:
-    """
-    Sum memory_size field from all segments (bytes → MB).
-    Falls back to 0.0 if the field is unavailable.
-    """
-    total_bytes = sum(getattr(seg, "memory_size", 0) for seg in segments)
-    return total_bytes / (1024 ** 2)

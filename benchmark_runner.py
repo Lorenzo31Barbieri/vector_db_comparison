@@ -362,8 +362,6 @@ def _run_index_comparison_scenario(
                 "index_time_s": lifecycle["index"].get("index_time"),
                 "index_throughput_vps": lifecycle["index"].get("index_throughput"),
                 "load_time_s": lifecycle["load"].get("load_time"),
-                "memory_mb": lifecycle.get("memory_mb"),
-                "storage_mb": lifecycle.get("storage_mb"),
                 **ann_result["latency"],
                 **quality,
             },
@@ -429,8 +427,6 @@ def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
                         "index_time_s": lifecycle["index"].get("index_time"),
                         "index_throughput_vps": lifecycle["index"].get("index_throughput"),
                         "load_time_s": lifecycle["load"].get("load_time"),
-                        "memory_mb": lifecycle.get("memory_mb"),
-                        "storage_mb": lifecycle.get("storage_mb"),
                     },
                 }
                 _append_result(tracker=tracker, all_rows=rows, result=lifecycle_row)
