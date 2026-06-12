@@ -10,6 +10,31 @@ except ImportError:
 from common.perf import aggregate_latency_metrics as shared_aggregate_latency_metrics
 
 
+def _build_search_param(effective_ef: int) -> dict:
+    index_type = str(config.INDEX_TYPE).upper()
+
+    if index_type == "HNSW":
+        return {
+            "metric_type": config.METRIC_TYPE,
+            "params": {"ef": effective_ef},
+        }
+
+    if index_type == "IVF_FLAT":
+        nprobe = max(1, min(int(config.IVF_NPROBE), int(config.IVF_NLIST)))
+        return {
+            "metric_type": config.METRIC_TYPE,
+            "params": {"nprobe": nprobe},
+        }
+
+    if index_type == "FLAT":
+        return {
+            "metric_type": config.METRIC_TYPE,
+            "params": {},
+        }
+
+    raise ValueError(f"Unsupported Milvus index type '{config.INDEX_TYPE}'")
+
+
 def search(
     collection: Collection,
     vectors: list,
@@ -23,7 +48,7 @@ def search(
     return collection.search(
         data=vectors,
         anns_field="vector",
-        param={"metric_type": config.METRIC_TYPE, "params": {"ef": effective_ef}},
+        param=_build_search_param(effective_ef),
         limit=effective_limit,
         expr=expr,
     )

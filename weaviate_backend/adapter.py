@@ -24,6 +24,15 @@ import db as weaviate_db
 class WeaviateAdapter:
     backend_name: str = "weaviate"
 
+    def supported_index_types(self) -> list[str]:
+        return ["hnsw", "flat"]
+
+    def set_index_type(self, index_type: str) -> None:
+        normalized = str(index_type).lower()
+        if normalized not in self.supported_index_types():
+            raise ValueError(f"Unsupported Weaviate index type '{index_type}'")
+        weaviate_config.VECTOR_INDEX_TYPE = normalized
+
     def configure(
         self,
         *,

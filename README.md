@@ -150,6 +150,15 @@ Each run writes a timestamped directory under `results/` with:
 - `concurrency`: throughput and tail latency under concurrent search
 - `filtering`: filtered ANN quality and latency by selectivity
 - `hybrid`: explicit placeholder (`skipped`) until common API is implemented
+- `index_comparison`: compare important vector index types for each backend independently
+
+Quick index comparison run:
+
+```bash
+python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend milvus
+python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend qdrant
+python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend weaviate
+```
 
 ## Config notes
 

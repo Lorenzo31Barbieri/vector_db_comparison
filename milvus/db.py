@@ -90,12 +90,31 @@ def build_index(collection: Collection, num_vectors: int) -> dict:
     -------
     dict with keys: index_time (s), index_throughput (vectors/s)
     """
-    print(f"\nBuilding {config.INDEX_TYPE} index (M={config.HNSW_M}, efConstruction={config.HNSW_EF_CONSTRUCT})...")
-    index_params = {
-        "index_type": config.INDEX_TYPE,
-        "metric_type": config.METRIC_TYPE,
-        "params": {"M": config.HNSW_M, "efConstruction": config.HNSW_EF_CONSTRUCT},
-    }
+    index_type = str(config.INDEX_TYPE).upper()
+
+    if index_type == "HNSW":
+        print(f"\nBuilding {index_type} index (M={config.HNSW_M}, efConstruction={config.HNSW_EF_CONSTRUCT})...")
+        index_params = {
+            "index_type": index_type,
+            "metric_type": config.METRIC_TYPE,
+            "params": {"M": config.HNSW_M, "efConstruction": config.HNSW_EF_CONSTRUCT},
+        }
+    elif index_type == "IVF_FLAT":
+        print(f"\nBuilding {index_type} index (nlist={config.IVF_NLIST})...")
+        index_params = {
+            "index_type": index_type,
+            "metric_type": config.METRIC_TYPE,
+            "params": {"nlist": config.IVF_NLIST},
+        }
+    elif index_type == "FLAT":
+        print(f"\nBuilding {index_type} index...")
+        index_params = {
+            "index_type": index_type,
+            "metric_type": config.METRIC_TYPE,
+            "params": {},
+        }
+    else:
+        raise ValueError(f"Unsupported Milvus index type '{config.INDEX_TYPE}'")
 
     start = time.time()
     collection.create_index(field_name="vector", index_params=index_params)

@@ -16,6 +16,15 @@ from milvus import db as milvus_db
 class MilvusAdapter:
     backend_name: str = "milvus"
 
+    def supported_index_types(self) -> list[str]:
+        return ["HNSW", "IVF_FLAT", "FLAT"]
+
+    def set_index_type(self, index_type: str) -> None:
+        normalized = str(index_type).upper()
+        if normalized not in self.supported_index_types():
+            raise ValueError(f"Unsupported Milvus index type '{index_type}'")
+        milvus_config.INDEX_TYPE = normalized
+
     def configure(
         self,
         *,

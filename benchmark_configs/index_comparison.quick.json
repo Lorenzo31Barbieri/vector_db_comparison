@@ -1,0 +1,45 @@
+{
+  "experiment": {
+    "name": "vectordb_index_comparison",
+    "seed": 123,
+    "repeats": 5,
+    "output_dir": "results",
+    "notes": "Per-backend index comparison"
+  },
+  "dataset": {
+    "name": "open-vdb/sift-128-euclidean",
+    "sizes": [10000, 50000, 100000, 200000],
+    "query_count": 300,
+    "top_k": 10
+  },
+  "backends": [
+    "milvus",
+    "qdrant",
+    "weaviate"
+  ],
+  "ann": {
+    "enabled": false,
+    "hnsw_ef_values": [64]
+  },
+  "concurrency": {
+    "enabled": false,
+    "concurrency_levels": [1]
+  },
+  "filtering": {
+    "enabled": false,
+    "selectivities": [0.5]
+  },
+  "hybrid": {
+    "enabled": false,
+    "mode": "metadata_rerank_placeholder"
+  },
+  "index_comparison": {
+    "enabled": true,
+    "index_types_by_backend": {
+      "milvus": ["HNSW", "IVF_FLAT", "FLAT"],
+      "qdrant": ["HNSW"],
+      "weaviate": ["hnsw", "flat"]
+    },
+    "ann_hnsw_ef": 64
+  }
+}

@@ -41,21 +41,34 @@ def recreate_collection(client: weaviate.WeaviateClient, dimension: int) -> None
         print(f"Deleting existing collection '{config.COLLECTION_NAME}'...")
         client.collections.delete(config.COLLECTION_NAME)
 
-    print(
-        f"Creating collection '{config.COLLECTION_NAME}' "
-        f"(dim={dimension}, distance={config.DISTANCE}, "
-        f"m={config.HNSW_M}, ef_construct={config.HNSW_EF_CONSTRUCT})..."
-    )
+    index_type = str(config.VECTOR_INDEX_TYPE).lower()
+    if index_type == "hnsw":
+        print(
+            f"Creating collection '{config.COLLECTION_NAME}' "
+            f"(index=hnsw, dim={dimension}, distance={config.DISTANCE}, "
+            f"m={config.HNSW_M}, ef_construct={config.HNSW_EF_CONSTRUCT})..."
+        )
+        vector_index_config = Configure.VectorIndex.hnsw(
+            max_connections=config.HNSW_M,
+            ef_construction=config.HNSW_EF_CONSTRUCT,
+            ef=config.HNSW_EF,
+            distance_metric=VectorDistances[config.DISTANCE],
+        )
+    elif index_type == "flat":
+        print(
+            f"Creating collection '{config.COLLECTION_NAME}' "
+            f"(index=flat, dim={dimension}, distance={config.DISTANCE})..."
+        )
+        vector_index_config = Configure.VectorIndex.flat(
+            distance_metric=VectorDistances[config.DISTANCE],
+        )
+    else:
+        raise ValueError(f"Unsupported Weaviate index type '{config.VECTOR_INDEX_TYPE}'")
 
     client.collections.create(
         name=config.COLLECTION_NAME,
         vector_config=Configure.Vectors.self_provided(
-            vector_index_config=Configure.VectorIndex.hnsw(
-                max_connections=config.HNSW_M,
-                ef_construction=config.HNSW_EF_CONSTRUCT,
-                ef=config.HNSW_EF,
-                distance_metric=VectorDistances[config.DISTANCE],
-            )
+            vector_index_config=vector_index_config
         ),
         properties=[
             Property(name="bucket", data_type=DataType.INT),
@@ -116,10 +129,7 @@ def build_index(
     client: weaviate.WeaviateClient,
     num_vectors: int,
 ) -> dict:
-    print(
-        f"\nSynchronizing HNSW index "
-        f"(m={config.HNSW_M}, ef_construct={config.HNSW_EF_CONSTRUCT})..."
-    )
+    print(f"\nSynchronizing {str(config.VECTOR_INDEX_TYPE).lower()} index...")
 
     collection = client.collections.get(config.COLLECTION_NAME)
     start = time.time()

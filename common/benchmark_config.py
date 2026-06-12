@@ -51,6 +51,18 @@ class HybridScenarioConfig(ScenarioConfig):
 
 
 @dataclass
+class IndexComparisonScenarioConfig(ScenarioConfig):
+    index_types_by_backend: dict[str, list[str]] = field(
+        default_factory=lambda: {
+            "milvus": ["HNSW", "IVF_FLAT", "FLAT"],
+            "qdrant": ["HNSW"],
+            "weaviate": ["hnsw", "flat"],
+        }
+    )
+    ann_hnsw_ef: int = 128
+
+
+@dataclass
 class SuiteConfig:
     experiment: ExperimentConfig
     dataset: DatasetConfig
@@ -59,6 +71,7 @@ class SuiteConfig:
     concurrency: ConcurrencyScenarioConfig = field(default_factory=ConcurrencyScenarioConfig)
     filtering: FilteringScenarioConfig = field(default_factory=FilteringScenarioConfig)
     hybrid: HybridScenarioConfig = field(default_factory=HybridScenarioConfig)
+    index_comparison: IndexComparisonScenarioConfig = field(default_factory=IndexComparisonScenarioConfig)
 
 
 DEFAULT_CONFIG = {
@@ -92,6 +105,15 @@ DEFAULT_CONFIG = {
         "enabled": False,
         "mode": "metadata_rerank_placeholder",
     },
+    "index_comparison": {
+        "enabled": False,
+        "index_types_by_backend": {
+            "milvus": ["HNSW", "IVF_FLAT", "FLAT"],
+            "qdrant": ["HNSW"],
+            "weaviate": ["hnsw", "flat"]
+        },
+        "ann_hnsw_ef": 128
+    },
 }
 
 
@@ -110,6 +132,7 @@ def load_suite_config(config_path: str | Path) -> SuiteConfig:
     concurrency = ConcurrencyScenarioConfig(**raw.get("concurrency", {}))
     filtering = FilteringScenarioConfig(**raw.get("filtering", {}))
     hybrid = HybridScenarioConfig(**raw.get("hybrid", {}))
+    index_comparison = IndexComparisonScenarioConfig(**raw.get("index_comparison", {}))
 
     return SuiteConfig(
         experiment=experiment,
@@ -119,6 +142,7 @@ def load_suite_config(config_path: str | Path) -> SuiteConfig:
         concurrency=concurrency,
         filtering=filtering,
         hybrid=hybrid,
+        index_comparison=index_comparison,
     )
 
 

@@ -18,6 +18,15 @@ from qdrant import db as qdrant_db
 class QdrantAdapter:
     backend_name: str = "qdrant"
 
+    def supported_index_types(self) -> list[str]:
+        return ["HNSW"]
+
+    def set_index_type(self, index_type: str) -> None:
+        normalized = str(index_type).upper()
+        if normalized not in self.supported_index_types():
+            raise ValueError(f"Unsupported Qdrant index type '{index_type}'")
+        qdrant_config.VECTOR_INDEX_TYPE = normalized
+
     def configure(
         self,
         *,

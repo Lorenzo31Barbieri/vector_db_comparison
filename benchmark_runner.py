@@ -275,6 +275,102 @@ def _run_hybrid_placeholder(*, config, backend_name: str, dataset_name: str, dat
     )
 
 
+def _run_index_comparison_scenario(
+    *,
+    adapter,
+    config,
+    backend_name: str,
+    dataset_size: int,
+    dataset_name: str,
+    vectors: np.ndarray,
+    query_vectors: np.ndarray,
+    tracker: ExperimentTracker,
+    rows: list[dict],
+    logger: logging.Logger,
+) -> None:
+    if not config.index_comparison.enabled:
+        return
+
+    supported = getattr(adapter, "supported_index_types", None)
+    set_index_type = getattr(adapter, "set_index_type", None)
+    if not callable(supported) or not callable(set_index_type):
+        logger.info("Skipping index comparison for backend=%s (adapter does not expose index switching)", backend_name)
+        return
+
+    requested = config.index_comparison.index_types_by_backend.get(backend_name, [])
+    if not requested:
+        logger.info("Skipping index comparison for backend=%s (no index types configured)", backend_name)
+        return
+
+    available = set(supported())
+    index_types = [index_type for index_type in requested if index_type in available]
+    if not index_types:
+        logger.info("Skipping index comparison for backend=%s (no configured index types are supported)", backend_name)
+        return
+
+    adapter_kwarg = "ef" if backend_name == "milvus" else "hnsw_ef"
+    sweep_ef = config.index_comparison.ann_hnsw_ef
+    teardown = getattr(adapter, "teardown", None)
+
+    # Close the initial runtime before rebuilding for each index variant.
+    if callable(teardown):
+        teardown()
+
+    for index_index, index_type in enumerate(index_types):
+        if index_index > 0 and callable(teardown):
+            teardown()
+
+        logger.info(
+            "Running index comparison backend=%s dataset_size=%s index_type=%s",
+            backend_name,
+            dataset_size,
+            index_type,
+        )
+
+        set_index_type(index_type)
+        lifecycle = adapter.prepare(vectors)
+        adapter.warm_up(query_vectors)
+
+        ground_truth = adapter.build_ground_truth(
+            query_vectors,
+            limit=config.dataset.top_k,
+        )
+        ann_result = adapter.run_ann(
+            query_vectors,
+            **{adapter_kwarg: sweep_ef},
+            limit=config.dataset.top_k,
+        )
+        quality = compute_recall_and_precision_at_k(
+            ann_result["ids"],
+            ground_truth,
+            config.dataset.top_k,
+        )
+
+        row = {
+            "scenario": "index_comparison",
+            "backend": backend_name,
+            "dataset_name": dataset_name,
+            "dataset_size": dataset_size,
+            "params": {
+                "index_type": index_type,
+                "hnsw_ef": sweep_ef,
+                "top_k": config.dataset.top_k,
+            },
+            "metrics": {
+                "insert_time_s": lifecycle["insert"].get("insert_time"),
+                "insert_throughput_vps": lifecycle["insert"].get("throughput"),
+                "index_time_s": lifecycle["index"].get("index_time"),
+                "index_throughput_vps": lifecycle["index"].get("index_throughput"),
+                "load_time_s": lifecycle["load"].get("load_time"),
+                "memory_mb": lifecycle.get("memory_mb"),
+                "storage_mb": lifecycle.get("storage_mb"),
+                **ann_result["latency"],
+                **quality,
+            },
+        }
+        _append_result(tracker=tracker, all_rows=rows, result=row)
+
+
 def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
     root_dir = Path(__file__).resolve().parent
     config = load_suite_config(config_path)
@@ -377,6 +473,18 @@ def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
                     backend_name=backend_name,
                     dataset_name=config.dataset.name,
                     dataset_size=dataset_size,
+                    tracker=tracker,
+                    rows=rows,
+                    logger=logger,
+                )
+                _run_index_comparison_scenario(
+                    adapter=adapter,
+                    config=config,
+                    backend_name=backend_name,
+                    dataset_size=dataset_size,
+                    dataset_name=config.dataset.name,
+                    vectors=vectors,
+                    query_vectors=query_vectors,
                     tracker=tracker,
                     rows=rows,
                     logger=logger,
