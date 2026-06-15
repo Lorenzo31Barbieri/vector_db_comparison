@@ -23,8 +23,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--metric",
-        default="metrics.avg_ms",
-        help="CSV metric column for y-axis (default: metrics.avg_ms)",
+        default="metrics.p95_ms",
+        help="CSV metric column for y-axis (default: metrics.p95_ms)",
     )
     parser.add_argument(
         "--output-dir",
