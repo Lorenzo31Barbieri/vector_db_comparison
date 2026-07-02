@@ -151,6 +151,7 @@ Each run writes a timestamped directory under `results/` with:
 - `filtering`: filtered ANN quality and latency by selectivity
 - `hybrid`: explicit placeholder (`skipped`) until common API is implemented
 - `index_comparison`: compare important vector index types for each backend independently
+- `hnsw_m`: sweep HNSW M values and report flat per-run/per-summary rows for easy CSV analysis
 
 Quick index comparison run:
 
@@ -158,6 +159,12 @@ Quick index comparison run:
 python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend milvus
 python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend qdrant
 python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend weaviate
+
+HNSW M comparison run:
+
+```bash
+python benchmark_runner.py --config benchmark_configs/hnsw_m_comparison.json
+```
 ```
 
 ## Config notes
@@ -171,4 +178,5 @@ Key fields:
 - `ann.hnsw_ef_values`
 - `concurrency.concurrency_levels`
 - `filtering.selectivities`
+- `hnsw_m.m_values`, `hnsw_m.ann_hnsw_ef`
 - `experiment.repeats`, `experiment.seed`

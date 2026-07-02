@@ -33,6 +33,9 @@ class WeaviateAdapter:
             raise ValueError(f"Unsupported Weaviate index type '{index_type}'")
         weaviate_config.VECTOR_INDEX_TYPE = normalized
 
+    def set_hnsw_m(self, hnsw_m: int) -> None:
+        weaviate_config.HNSW_M = int(hnsw_m)
+
     def configure(
         self,
         *,

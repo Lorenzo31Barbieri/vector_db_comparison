@@ -25,6 +25,9 @@ class MilvusAdapter:
             raise ValueError(f"Unsupported Milvus index type '{index_type}'")
         milvus_config.INDEX_TYPE = normalized
 
+    def set_hnsw_m(self, hnsw_m: int) -> None:
+        milvus_config.HNSW_M = int(hnsw_m)
+
     def configure(
         self,
         *,

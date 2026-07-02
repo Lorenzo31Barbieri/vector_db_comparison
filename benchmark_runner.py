@@ -369,6 +369,121 @@ def _run_index_comparison_scenario(
         _append_result(tracker=tracker, all_rows=rows, result=row)
 
 
+def _run_hnsw_m_scenario(
+    *,
+    adapter,
+    config,
+    backend_name: str,
+    dataset_size: int,
+    dataset_name: str,
+    vectors: np.ndarray,
+    query_vectors: np.ndarray,
+    tracker: ExperimentTracker,
+    rows: list[dict],
+    logger: logging.Logger,
+) -> None:
+    if not config.hnsw_m.enabled:
+        return
+
+    set_hnsw_m = getattr(adapter, "set_hnsw_m", None)
+    set_index_type = getattr(adapter, "set_index_type", None)
+    if not callable(set_hnsw_m) or not callable(set_index_type):
+        logger.info("Skipping hnsw_m scenario for backend=%s (adapter does not expose hnsw M/index controls)", backend_name)
+        return
+
+    hnsw_index_type = "hnsw" if backend_name == "weaviate" else "HNSW"
+    adapter_kwarg = "ef" if backend_name == "milvus" else "hnsw_ef"
+    sweep_ef = config.hnsw_m.ann_hnsw_ef
+    teardown = getattr(adapter, "teardown", None)
+
+    # Close the initial runtime before rebuilding for each HNSW M variant.
+    if callable(teardown):
+        teardown()
+
+    for m_index, hnsw_m in enumerate(config.hnsw_m.m_values):
+        if m_index > 0 and callable(teardown):
+            teardown()
+
+        logger.info(
+            "Running hnsw_m scenario backend=%s dataset_size=%s hnsw_m=%s",
+            backend_name,
+            dataset_size,
+            hnsw_m,
+        )
+
+        set_index_type(hnsw_index_type)
+        set_hnsw_m(int(hnsw_m))
+        lifecycle = adapter.prepare(vectors)
+        adapter.warm_up(query_vectors)
+
+        ground_truth = adapter.build_ground_truth(
+            query_vectors,
+            limit=config.dataset.top_k,
+        )
+
+        recall_values: list[float] = []
+        precision_values: list[float] = []
+        qps_values: list[float] = []
+        p95_values: list[float] = []
+
+        for repeat_index in range(config.experiment.repeats):
+            ann_result = adapter.run_ann(
+                query_vectors,
+                **{adapter_kwarg: sweep_ef},
+                limit=config.dataset.top_k,
+            )
+            quality = compute_recall_and_precision_at_k(
+                ann_result["ids"],
+                ground_truth,
+                config.dataset.top_k,
+            )
+
+            recall_values.append(quality["recall_at_k"])
+            precision_values.append(quality["precision_at_k"])
+            qps_values.append(ann_result["latency"].get("qps", 0.0))
+            p95_values.append(ann_result["latency"].get("p95_ms", 0.0))
+
+            row = {
+                "scenario": "hnsw_m",
+                "backend": backend_name,
+                "dataset_name": dataset_name,
+                "dataset_size": dataset_size,
+                "repeat": repeat_index + 1,
+                "hnsw_m": int(hnsw_m),
+                "hnsw_ef": sweep_ef,
+                "top_k": config.dataset.top_k,
+                "index_time_s": lifecycle["index"].get("index_time"),
+                "index_throughput_vps": lifecycle["index"].get("index_throughput"),
+                "load_time_s": lifecycle["load"].get("load_time"),
+                "qps": ann_result["latency"].get("qps"),
+                "mean_ms": ann_result["latency"].get("mean_ms"),
+                "p95_ms": ann_result["latency"].get("p95_ms"),
+                "p99_ms": ann_result["latency"].get("p99_ms"),
+                "recall_at_k": quality["recall_at_k"],
+                "precision_at_k": quality["precision_at_k"],
+            }
+            _append_result(tracker=tracker, all_rows=rows, result=row)
+
+        summary_row = {
+            "scenario": "hnsw_m_summary",
+            "backend": backend_name,
+            "dataset_name": dataset_name,
+            "dataset_size": dataset_size,
+            "hnsw_m": int(hnsw_m),
+            "hnsw_ef": sweep_ef,
+            "top_k": config.dataset.top_k,
+            "index_time_s": lifecycle["index"].get("index_time"),
+            "index_throughput_vps": lifecycle["index"].get("index_throughput"),
+            "load_time_s": lifecycle["load"].get("load_time"),
+            "qps_mean": statistics.mean(qps_values),
+            "p95_ms_mean": statistics.mean(p95_values),
+            "recall_mean": statistics.mean(recall_values),
+            "recall_std": statistics.pstdev(recall_values) if len(recall_values) > 1 else 0.0,
+            "precision_mean": statistics.mean(precision_values),
+        }
+        _append_result(tracker=tracker, all_rows=rows, result=summary_row)
+
+
 def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
     root_dir = Path(__file__).resolve().parent
     config = load_suite_config(config_path)
@@ -474,6 +589,18 @@ def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
                     logger=logger,
                 )
                 _run_index_comparison_scenario(
+                    adapter=adapter,
+                    config=config,
+                    backend_name=backend_name,
+                    dataset_size=dataset_size,
+                    dataset_name=config.dataset.name,
+                    vectors=vectors,
+                    query_vectors=query_vectors,
+                    tracker=tracker,
+                    rows=rows,
+                    logger=logger,
+                )
+                _run_hnsw_m_scenario(
                     adapter=adapter,
                     config=config,
                     backend_name=backend_name,

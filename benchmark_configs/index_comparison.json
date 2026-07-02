@@ -8,7 +8,7 @@
   },
   "dataset": {
     "name": "open-vdb/sift-128-euclidean",
-    "sizes": [10000, 50000, 100000, 200000],
+    "sizes": [10000, 50000, 100000, 200000, 500000],
     "query_count": 300,
     "top_k": 10
   },
@@ -17,22 +17,6 @@
     "qdrant",
     "weaviate"
   ],
-  "ann": {
-    "enabled": false,
-    "hnsw_ef_values": [64]
-  },
-  "concurrency": {
-    "enabled": false,
-    "concurrency_levels": [1]
-  },
-  "filtering": {
-    "enabled": false,
-    "selectivities": [0.5]
-  },
-  "hybrid": {
-    "enabled": false,
-    "mode": "metadata_rerank_placeholder"
-  },
   "index_comparison": {
     "enabled": true,
     "index_types_by_backend": {

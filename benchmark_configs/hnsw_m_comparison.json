@@ -1,0 +1,40 @@
+{
+  "experiment": {
+    "name": "vectordb_hnsw_m_comparison",
+    "seed": 123,
+    "repeats": 3,
+    "output_dir": "results",
+    "notes": "Evaluate HNSW_M impact on index build time and ANN performance"
+  },
+  "dataset": {
+    "name": "open-vdb/sift-128-euclidean",
+    "sizes": [100000],
+    "query_count": 300,
+    "top_k": 10
+  },
+  "backends": [
+    "milvus",
+    "qdrant",
+    "weaviate"
+  ],
+  "ann": {
+    "enabled": false
+  },
+  "concurrency": {
+    "enabled": false
+  },
+  "filtering": {
+    "enabled": false
+  },
+  "hybrid": {
+    "enabled": false
+  },
+  "index_comparison": {
+    "enabled": false
+  },
+  "hnsw_m": {
+    "enabled": true,
+    "m_values": [8, 16, 32, 64],
+    "ann_hnsw_ef": 128
+  }
+}

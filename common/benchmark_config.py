@@ -63,6 +63,13 @@ class IndexComparisonScenarioConfig(ScenarioConfig):
 
 
 @dataclass
+class HnswMScenarioConfig(ScenarioConfig):
+    enabled: bool = False
+    m_values: list[int] = field(default_factory=lambda: [8, 16, 32, 64])
+    ann_hnsw_ef: int = 128
+
+
+@dataclass
 class SuiteConfig:
     experiment: ExperimentConfig
     dataset: DatasetConfig
@@ -72,6 +79,7 @@ class SuiteConfig:
     filtering: FilteringScenarioConfig = field(default_factory=FilteringScenarioConfig)
     hybrid: HybridScenarioConfig = field(default_factory=HybridScenarioConfig)
     index_comparison: IndexComparisonScenarioConfig = field(default_factory=IndexComparisonScenarioConfig)
+    hnsw_m: HnswMScenarioConfig = field(default_factory=HnswMScenarioConfig)
 
 
 DEFAULT_CONFIG = {
@@ -114,6 +122,11 @@ DEFAULT_CONFIG = {
         },
         "ann_hnsw_ef": 128
     },
+    "hnsw_m": {
+        "enabled": False,
+        "m_values": [8, 16, 32, 64],
+        "ann_hnsw_ef": 128
+    },
 }
 
 
@@ -133,6 +146,7 @@ def load_suite_config(config_path: str | Path) -> SuiteConfig:
     filtering = FilteringScenarioConfig(**raw.get("filtering", {}))
     hybrid = HybridScenarioConfig(**raw.get("hybrid", {}))
     index_comparison = IndexComparisonScenarioConfig(**raw.get("index_comparison", {}))
+    hnsw_m = HnswMScenarioConfig(**raw.get("hnsw_m", {}))
 
     return SuiteConfig(
         experiment=experiment,
@@ -143,6 +157,7 @@ def load_suite_config(config_path: str | Path) -> SuiteConfig:
         filtering=filtering,
         hybrid=hybrid,
         index_comparison=index_comparison,
+        hnsw_m=hnsw_m,
     )
 
 

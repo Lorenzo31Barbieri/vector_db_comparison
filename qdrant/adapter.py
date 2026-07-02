@@ -27,6 +27,9 @@ class QdrantAdapter:
             raise ValueError(f"Unsupported Qdrant index type '{index_type}'")
         qdrant_config.VECTOR_INDEX_TYPE = normalized
 
+    def set_hnsw_m(self, hnsw_m: int) -> None:
+        qdrant_config.HNSW_M = int(hnsw_m)
+
     def configure(
         self,
         *,
