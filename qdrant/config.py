@@ -32,3 +32,7 @@ WARM_UP_QUERIES = 5
 
 # --- Optimizer ---
 INDEXING_THRESHOLD = 20_000
+
+# --- Cluster ---
+SHARD_NUMBER = 1
+REPLICATION_FACTOR = 1

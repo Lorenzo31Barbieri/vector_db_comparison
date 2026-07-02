@@ -67,6 +67,9 @@ def recreate_collection(client: QdrantClient, dimension: int) -> None:
             distance=Distance[config.DISTANCE],
         ),
 
+        shard_number=config.SHARD_NUMBER,
+        replication_factor=config.REPLICATION_FACTOR,
+
         hnsw_config=HnswConfigDiff(
             m=config.HNSW_M,
             ef_construct=config.HNSW_EF_CONSTRUCT,
