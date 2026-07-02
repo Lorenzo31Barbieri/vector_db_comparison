@@ -2,14 +2,14 @@
   "experiment": {
     "name": "vectordb_academic_matrix",
     "seed": 123,
-    "repeats": 7,
+    "repeats": 3,
     "output_dir": "results",
     "notes": "Extended matrix for academic analysis with confidence intervals"
   },
   "dataset": {
     "name": "open-vdb/sift-128-euclidean",
-    "sizes": [100000, 200000],
-    "query_count": 500,
+    "sizes": [10000, 50000, 100000, 200000, 500000],
+    "query_count": 300,
     "top_k": 10
   },
   "backends": [
