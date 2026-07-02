@@ -44,7 +44,11 @@ def recreate_collection(dimension: int) -> Collection:
         FieldSchema(name="bucket", dtype=DataType.INT64),
     ]
     schema = CollectionSchema(fields, description="SIFT Benchmark")
-    collection = Collection(name=config.COLLECTION_NAME, schema=schema)
+    collection = Collection(
+        name=config.COLLECTION_NAME,
+        schema=schema,
+        shards_num=int(config.MILVUS_SHARDS_NUM),
+    )
     print("Collection created!")
     return collection
 
@@ -127,7 +131,7 @@ def build_index(collection: Collection, num_vectors: int) -> dict:
 
 # ── Load into memory ─────────────────────────────────────────────────────────
 
-def load_collection(collection: Collection) -> dict:
+def load_collection(collection: Collection, replica_number: int, expected_query_nodes: int) -> dict:
     """
     Load the collection into query-node memory.
 
@@ -135,9 +139,9 @@ def load_collection(collection: Collection) -> dict:
     -------
     dict with key: load_time (s)
     """
-    print("\nLoading collection into memory...")
+    print(f"\nLoading collection into memory (replica_number={replica_number})...")
     start = time.time()
-    collection.load()
+    collection.load(replica_number=replica_number, expected_query_nodes=(expected_query_nodes if expected_query_nodes > 0 else None))
     elapsed = time.time() - start
     print(f"Loaded in {elapsed:.2f}s")
     return {"load_time": elapsed}

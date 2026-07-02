@@ -5,6 +5,9 @@ MILVUS_MAX_MSG_SIZE = 1_073_741_824  # 1 GB
 
 # --- Collection ---
 COLLECTION_NAME = "sift_benchmark"
+MILVUS_SHARDS_NUM = 3
+MILVUS_LOAD_REPLICA_NUMBER = 1
+MILVUS_EXPECTED_QUERY_NODES = 3
 
 # --- Dataset ---
 DATASET_NAME = "open-vdb/sift-128-euclidean"

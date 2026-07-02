@@ -55,7 +55,12 @@ class MilvusAdapter:
         vector_list = vectors.astype(np.float32).tolist()
         insert_stats = milvus_db.insert_vectors(collection, vector_list)
         index_stats = milvus_db.build_index(collection, len(vector_list))
-        load_stats = milvus_db.load_collection(collection)
+        expected_nodes = int(milvus_config.MILVUS_EXPECTED_QUERY_NODES)
+        load_stats = milvus_db.load_collection(
+            collection,
+            replica_number=int(milvus_config.MILVUS_LOAD_REPLICA_NUMBER),
+            expected_query_nodes=(expected_nodes if expected_nodes > 0 else None),
+        )
 
         self.collection = collection
 
