@@ -1,0 +1,73 @@
+services:
+  weaviate-node1:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.37.2
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scheme
+      - http
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - weaviate_data_node1:/var/lib/weaviate
+    restart: on-failure:0
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      ENABLE_MODULES: "text2vec-ollama,generative-ollama"
+
+      # cluster config
+      CLUSTER_HOSTNAME: "node1"
+      CLUSTER_GOSSIP_BIND_PORT: "7100"
+      CLUSTER_DATA_BIND_PORT: "7101"
+      CLUSTER_JOIN: ""
+
+      OLLAMA_API_ENDPOINT: "http://ollama:11434"
+    depends_on:
+      - ollama
+
+  weaviate-node2:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.37.2
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --scheme
+      - http
+    ports:
+      - "8081:8080"
+      - "50052:50051"
+    volumes:
+      - weaviate_data_node2:/var/lib/weaviate
+    restart: on-failure:0
+    environment:
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      ENABLE_MODULES: "text2vec-ollama,generative-ollama"
+
+      # cluster config
+      CLUSTER_HOSTNAME: "node2"
+      CLUSTER_GOSSIP_BIND_PORT: "7100"
+      CLUSTER_DATA_BIND_PORT: "7101"
+      CLUSTER_JOIN: "node1:7100"
+
+      OLLAMA_API_ENDPOINT: "http://ollama:11434"
+    depends_on:
+      - weaviate-node1
+      - ollama
+
+  ollama:
+    image: ollama/ollama:0.12.9
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  weaviate_data_node1:
+  weaviate_data_node2:
+  ollama_data:
