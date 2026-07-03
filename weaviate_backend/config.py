@@ -22,6 +22,10 @@ VECTOR_INDEX_TYPE = "hnsw"
 HNSW_M = 16
 HNSW_EF_CONSTRUCT = 100
 
+# --- Sharding & Replication ---
+SHARD_COUNT = 1
+REPLICATION_FACTOR = 1
+
 # --- Distance metric ---
 DISTANCE = "L2_SQUARED"
 

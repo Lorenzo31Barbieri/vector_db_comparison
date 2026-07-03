@@ -70,6 +70,8 @@ def recreate_collection(client: weaviate.WeaviateClient, dimension: int) -> None
         vector_config=Configure.Vectors.self_provided(
             vector_index_config=vector_index_config
         ),
+        replication_config=Configure.replication(factor=config.REPLICATION_FACTOR),
+        sharding_config=Configure.sharding(desired_count=config.SHARD_COUNT),
         properties=[
             Property(name="bucket", data_type=DataType.INT),
             Property(name="label", data_type=DataType.TEXT),
