@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import platform
 import random
 import statistics
-import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -17,50 +14,6 @@ from common.benchmark_config import load_suite_config, write_default_suite_confi
 from common.benchmark_results import ExperimentTracker, flatten_for_csv
 from common.benchmark_workloads import compute_recall_and_precision_at_k, run_concurrency_benchmark
 from common.dataset import load_sift_vectors
-
-
-def _git_commit(root_dir: Path) -> str | None:
-    head = root_dir / ".git" / "HEAD"
-    if not head.exists():
-        return None
-
-    head_text = head.read_text(encoding="utf-8").strip()
-    if not head_text.startswith("ref:"):
-        return head_text
-
-    ref_path = root_dir / ".git" / head_text.split(" ", 1)[1]
-    if ref_path.exists():
-        return ref_path.read_text(encoding="utf-8").strip()
-
-    return None
-
-
-def _build_manifest(config, root_dir: Path, active_backends: Sequence[str]) -> dict:
-    return {
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "experiment": {
-            "name": config.experiment.name,
-            "seed": config.experiment.seed,
-            "repeats": config.experiment.repeats,
-            "notes": config.experiment.notes,
-        },
-        "dataset": {
-            "name": config.dataset.name,
-            "sizes": config.dataset.sizes,
-            "query_count": config.dataset.query_count,
-            "top_k": config.dataset.top_k,
-        },
-        "backends": list(active_backends),
-        "system": {
-            "python": sys.version,
-            "platform": platform.platform(),
-            "machine": platform.machine(),
-            "processor": platform.processor(),
-        },
-        "git": {
-            "commit": _git_commit(root_dir),
-        },
-    }
 
 
 def _seed_everything(seed: int) -> None:
@@ -74,7 +27,6 @@ def _append_result(
     all_rows: list[dict],
     result: dict,
 ) -> None:
-    tracker.append_result(result)
     all_rows.append(flatten_for_csv(result))
 
 
@@ -485,14 +437,12 @@ def _run_hnsw_m_scenario(
 
 
 def run_suite(config_path: str, backends: Sequence[str] | None = None) -> Path:
-    root_dir = Path(__file__).resolve().parent
     config = load_suite_config(config_path)
     selected_backends = resolve_backends(backends if backends else config.backends)
 
     _seed_everything(config.experiment.seed)
 
     tracker = ExperimentTracker(Path(config.experiment.output_dir), config.experiment.name)
-    tracker.write_manifest(_build_manifest(config, root_dir, selected_backends))
 
     logger = logging.getLogger("benchmark_suite")
     logger.setLevel(logging.INFO)

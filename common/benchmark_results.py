@@ -17,17 +17,7 @@ class ExperimentTracker:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         self.run_dir = self.output_dir / f"{self.experiment_name}_{timestamp}"
         self.run_dir.mkdir(parents=True, exist_ok=True)
-        self.results_jsonl_path = self.run_dir / "results.jsonl"
         self.results_csv_path = self.run_dir / "results.csv"
-        self.manifest_path = self.run_dir / "manifest.json"
-
-    def write_manifest(self, manifest: dict[str, Any]) -> None:
-        with self.manifest_path.open("w", encoding="utf-8") as file:
-            json.dump(manifest, file, indent=2)
-
-    def append_result(self, result: dict[str, Any]) -> None:
-        with self.results_jsonl_path.open("a", encoding="utf-8") as file:
-            file.write(json.dumps(result) + "\n")
 
     def write_csv(self, rows: list[dict[str, Any]]) -> None:
         if not rows:
