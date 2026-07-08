@@ -2,7 +2,6 @@
 
 Configuration-driven benchmark suite for **Milvus**, **Qdrant**, and **Weaviate** on the [SIFT-128-euclidean](https://huggingface.co/datasets/open-vdb/sift-128-euclidean) dataset.
 
-Weaviate runtime modules are available under `weaviate/` (`config.py`, `db.py`, `benchmark.py`, `adapter.py`) and are enabled in suite execution.
 
 ## Supported execution modes
 
@@ -13,7 +12,7 @@ The project supports all required modes through one architecture:
 3. **Weaviate independently**
 4. **Cross-backend comparison in one run**
 
-## Architecture (refactored)
+## Architecture
 
 - `benchmark_runner.py`: single orchestrator for lifecycle + scenarios
 - `common/backends.py`: backend registry + validation
@@ -40,25 +39,19 @@ This keeps benchmark flow centralized while preserving backend-specific implemen
 │   ├── dataset.py
 │   ├── perf.py
 │   └── runtime_config.py
-├── milvus/
-│   ├── adapter.py
-│   ├── benchmark.py
-│   ├── config.py
-│   ├── db.py
-│   └── main.py
-└── qdrant/
+└── <backend>/
     ├── adapter.py
     ├── benchmark.py
     ├── config.py
     ├── db.py
     └── main.py
+
 ```
 
 ## Prerequisites
 
 - Python 3.9+
-- Docker + Docker Compose (Milvus)
-- Running Qdrant server
+- Docker + Docker Compose
 
 ## Setup
 
@@ -66,117 +59,46 @@ This keeps benchmark flow centralized while preserving backend-specific implemen
 pip install -r requirements.txt
 ```
 
-Start Milvus:
+Start Docker container:
 
 ```bash
-docker compose up -d
-```
-
-Start Qdrant:
-
-```bash
-docker run -d -p 6333:6333 qdrant/qdrant
+cd docker
+docker compose up -f docker-compose-<backend>.yml -d
 ```
 
 ## Running benchmarks
 
-### A) Compare both backends in one run
+### A) Compare all backends in one run
 
 ```bash
-python benchmark_runner.py --config benchmark_configs/suite.default.json
+python benchmark_runner.py --config benchmark_configs/<config>.json
 ```
 
-### B) Run only Milvus
+### B) Run only one backend
 
 Option 1 (single entrypoint with backend filter):
 
 ```bash
-python benchmark_runner.py --config benchmark_configs/suite.default.json --backend milvus
+python benchmark_runner.py --config benchmark_configs/<config>.json --backend <milvus|qdrant|weaviate>
 ```
 
 Option 2 (backend wrapper):
 
 ```bash
-python milvus/main.py --config benchmark_configs/suite.default.json
-```
-
-### C) Run only Qdrant
-
-Option 1:
-
-```bash
-python benchmark_runner.py --config benchmark_configs/suite.default.json --backend qdrant
-```
-
-Option 2:
-
-```bash
-python qdrant/main.py --config benchmark_configs/suite.default.json
-```
-
-### D) Run only Weaviate
-
-Option 1:
-
-```bash
-python benchmark_runner.py --config benchmark_configs/suite.default.json --backend weaviate
-```
-
-Option 2:
-
-```bash
-python weaviate/main.py --config benchmark_configs/suite.default.json
-```
-
-Optional runtime smoke test:
-
-```bash
-python weaviate/smoke.py
+python <milvus|qdrant|weaviate_backend>/main.py --config benchmark_configs/<config>.json
 ```
 
 ## Output
 
 Each run writes a timestamped directory under `results/` with:
 
-- `manifest.json`: run metadata, config, environment, active backends
-- `results.jsonl`: full record stream
 - `results.csv`: flattened analysis table
 - `run.log`: execution logs
 
 ## Scenarios
 
 - `lifecycle`: insert/index/load
-- `ann_frontier`: recall/precision/latency/QPS sweep over HNSW ef
+- `ann_frontier`: recall/latency/QPS
 - `concurrency`: throughput and tail latency under concurrent search
 - `filtering`: filtered ANN quality and latency by selectivity
-- `hybrid`: explicit placeholder (`skipped`) until common API is implemented
 - `index_comparison`: compare important vector index types for each backend independently
-- `hnsw_m`: sweep HNSW M values and report flat per-run/per-summary rows for easy CSV analysis
-
-Quick index comparison run:
-
-```bash
-python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend milvus
-python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend qdrant
-python benchmark_runner.py --config benchmark_configs/index_comparison.quick.json --backend weaviate
-
-HNSW M comparison run:
-
-```bash
-python benchmark_runner.py --config benchmark_configs/hnsw_m_comparison.json
-```
-```
-
-## Config notes
-
-Benchmark configuration is fully JSON-driven via `benchmark_configs/*.json`.
-
-Key fields:
-
-- `backends`: `["milvus", "qdrant", "weaviate"]` (or a subset)
-- `dataset.sizes`, `dataset.query_count`, `dataset.top_k`
-- `ann.hnsw_ef_values`
-- `concurrency.concurrency_levels`
-- `filtering.selectivities`
-- `hnsw_m.m_values`, `hnsw_m.ann_hnsw_ef`
-- `experiment.repeats`, `experiment.seed`
