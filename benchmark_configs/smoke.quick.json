@@ -28,9 +28,5 @@
   "filtering": {
     "enabled": true,
     "selectivities": [0.5]
-  },
-  "hybrid": {
-    "enabled": false,
-    "mode": "metadata_rerank_placeholder"
   }
 }

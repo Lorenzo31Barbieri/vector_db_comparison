@@ -26,9 +26,6 @@
   "filtering": {
     "enabled": false
   },
-  "hybrid": {
-    "enabled": false
-  },
   "index_comparison": {
     "enabled": false
   },
